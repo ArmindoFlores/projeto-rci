@@ -174,7 +174,7 @@ int process_incoming_connection(t_serverinfo *si)
     if (newfd == -1)
         return -1;
 
-    if (si->tempfd >= 0) {
+    if (si->tempfd >= 0 || si->nextfd > 0) {
         // We already have a connection being established, reject this one
         puts("Rejected connection!");
         close(newfd);
@@ -198,35 +198,70 @@ void reset_pmt(size_t *buffer_size, int *tempfd)
     *buffer_size = 0;
 }
 
+t_read_out process_incoming(int *sfd, char *buffer, size_t *buffer_size, size_t max_buffer_size, t_conn_info *ci)
+{
+    t_read_out ro = recv_message(*sfd, buffer+(*buffer_size), '\n', max_buffer_size-(*buffer_size)-1, ci);
+    if (ro.read_type == RO_SUCCESS) {
+        *buffer_size += ro.read_bytes;
+        if (*buffer_size >= max_buffer_size-1 && buffer[max_buffer_size-1] != '\n') {
+            // This is already an invalid message (too big)
+            reset_pmt(buffer_size, sfd);
+            puts("Message is too big");
+            ro.read_type = RO_DISCONNECT;
+            return ro;
+        }
+    }
+    else if (ro.read_type == RO_ERROR) {
+        reset_pmt(buffer_size, sfd);
+        return ro;
+    }
+    else if (ro.read_type == RO_DISCONNECT) {
+        // Client closed the connection
+        reset_pmt(buffer_size, sfd);
+        puts("Client disconnected");
+        return ro;
+    }
+
+    buffer[*buffer_size] = '\0';
+    
+    printf("Buffer: %s (rb=%ld, bs=%ld)\n", buffer, ro.read_bytes, *buffer_size);
+
+    return ro;
+}
+
+int process_message_successor(t_serverinfo *si)
+{
+    static char buffer[64];
+    static size_t buffer_size = 0;
+
+    t_read_out ro = process_incoming(&si->nextfd, buffer, &buffer_size, sizeof(buffer), si->successor);
+    if (ro.read_type == RO_ERROR)
+        return ro.error_code;
+    if (ro.read_type == RO_DISCONNECT) {
+        // !! Successor has disconnected!
+        return 0;
+    }
+
+    if (buffer[buffer_size-1] != '\n') {
+        // We might not have received the whole message yet
+        puts("Waiting for more bytes...");
+        return 0;
+    }
+
+    printf("Received from successor: '%s'\n", buffer);
+    return 0;
+}
+
 int process_message_temp(t_serverinfo *si)
 {
     static char buffer[64];
     static size_t buffer_size = 0;
 
-    t_read_out ro = recv_message(si->tempfd, buffer+buffer_size, '\n', sizeof(buffer)-buffer_size-1, si->temp);
-    if (ro.read_type == RO_SUCCESS) {
-        buffer_size += ro.read_bytes;
-        if (buffer_size >= sizeof(buffer)-1 && buffer[sizeof(buffer)-1] != '\n') {
-            // This is already an invalid message (too big)
-            reset_pmt(&buffer_size, &si->tempfd);
-            puts("Message is too big");
-            return 0;
-        }
-    }
-    else if (ro.read_type == RO_ERROR) {
-        reset_pmt(&buffer_size, &si->tempfd);
+    t_read_out ro = process_incoming(&si->tempfd, buffer, &buffer_size, sizeof(buffer), si->temp);
+    if (ro.read_type == RO_ERROR)
         return ro.error_code;
-    }
-    else if (ro.read_type == RO_DISCONNECT) {
-        // Client closed the connection
-        reset_pmt(&buffer_size, &si->tempfd);
-        puts("Client disconnected");
+    if (ro.read_type == RO_DISCONNECT)
         return 0;
-    }
-
-    buffer[buffer_size] = '\0';
-    
-    printf("Buffer: %s (rb=%ld, bs=%ld)\n", buffer, ro.read_bytes, buffer_size);
 
     if (buffer[buffer_size-1] != '\n') {
         // We might not have received the whole message yet
@@ -303,6 +338,30 @@ int process_message_temp(t_serverinfo *si)
     // reset_pmt(&buffer_size, &si->tempfd);
     printf("Received valid message: i=%d IP=%s port=%d\n", node_i, node_ip, node_port);
     buffer_size = 0;
+
+    if (si->nextfd != -1) {
+        // Let the current successor know it has a new predecessor
+        char message[64] = "";
+        sprintf(message, "PRED %d %s %d\n", node_i, node_ip, node_port);
+        int result = sendall(si->nextfd, message, strlen(message));
+        if (result < 0) {
+            // Successor disconnected
+            close(si->nextfd);
+            si->nextfd = -1;
+        }
+        else if (result > 0) {
+            // An error occurred
+            close(si->nextfd);
+            si->nextfd = -1;
+            reset_pmt(&buffer_size, &si->tempfd);
+            return -1;
+        }
+    }
+
+    si->nextfd = si->tempfd;
+    copy_conn_info(&si->successor, si->temp);
+    reset_conn_buffer(si->temp);
+    si->tempfd = -1;
 
     return 0;
 }

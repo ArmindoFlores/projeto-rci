@@ -29,17 +29,26 @@ int main()
         t_event e = select_event(si);
         printf("Got new event '%s'\n", get_event_string(e));
 
+        int result = 0;
         switch (e) {
             case E_INCOMING_CONNECTION:
-                process_incoming_connection(si);
+                result = process_incoming_connection(si);
                 break;
 
             case E_MESSAGE_TEMP:
-                process_message_temp(si);
+                result = process_message_temp(si);
+                break;
+
+            case E_MESSAGE_SUCCESSOR:
+                result = process_message_successor(si);
                 break;
 
             default:
                 break;
+        }
+        if (result != 0) {
+            puts("An error has occurred!");
+            break;
         }
     }
 

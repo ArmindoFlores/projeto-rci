@@ -47,6 +47,31 @@ int has_available_data(t_conn_info *ci)
     return ci->buffer_size > 0;
 }
 
+void copy_conn_info(t_conn_info **dest, t_conn_info *src)
+{
+    if (*dest == NULL) {
+        *dest = new_conn_info(src->block_size, src->addr, src->addrlen);
+    }
+    else {
+        if ((*dest)->block_size != src->block_size) {
+            free((*dest)->buffer);
+            (*dest)->buffer = (char*) calloc(src->block_size, sizeof(char));
+        }
+        (*dest)->block_size = src->block_size;
+        (*dest)->addr = src->addr;
+        (*dest)->addrlen = src->addrlen;
+    }
+
+    (*dest)->buffer_size = src->buffer_size;
+    if (src->buffer_size)
+        memcpy((*dest)->buffer, src->buffer, src->buffer_size);
+}
+
+void reset_conn_buffer(t_conn_info* ci)
+{
+    ci->buffer_size = 0;
+}
+
 int sendall(int sd, char *message, size_t size)
 {
     size_t sent_bytes = 0;
@@ -54,6 +79,8 @@ int sendall(int sd, char *message, size_t size)
         int sent = send(sd, message+sent_bytes, size-sent_bytes, 0);
         if (sent < 0)
             return sent;
+        if (sent == 0)
+            return -1;
         sent_bytes += sent;
     }
     return 0;

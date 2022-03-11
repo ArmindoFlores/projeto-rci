@@ -31,6 +31,21 @@ typedef struct read_out {
 t_conn_info *new_conn_info(int block_size, struct sockaddr addr, socklen_t addrlen);
 
 /**
+ * @brief Copies src into dest
+ * 
+ * @param dest destination object
+ * @param src source object
+ */
+void copy_conn_info(t_conn_info **dest, t_conn_info *src);
+
+/**
+ * @brief Reset this connection's internal buffer
+ * 
+ * @param ci the t_conn_info object
+ */
+void reset_conn_buffer(t_conn_info* ci);
+
+/**
  * @brief Frees a t_conn_info object
  * 
  * @param ci the t_conn_info object
@@ -61,7 +76,8 @@ int has_available_data(t_conn_info *ci);
  * @param sd socket file descriptor
  * @param message message to be sent
  * @param size size of the message in bytes
- * @return [ @b int ] 0 if successfull, -1 otherwise
+ * @return [ @b int ] 0 if successfull, -1 if the connection was closed, and
+ * the number of bytes sent if another error occurred
  */
 int sendall(int sd, char *message, size_t size);
 

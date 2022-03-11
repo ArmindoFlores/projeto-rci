@@ -69,4 +69,12 @@ int process_incoming_connection(t_serverinfo *si);
  */
 int process_message_temp(t_serverinfo *si);
 
+/**
+ * @brief Process an incoming message from this node's successor
+ * 
+ * @param si necessary information about the server
+ * @return [ @b int ] 0 if successfull, -1 otherwise 
+ */
+int process_message_successor(t_serverinfo *si);
+
 #endif
