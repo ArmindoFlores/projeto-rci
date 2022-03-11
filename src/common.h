@@ -2,6 +2,58 @@
 #define COMMON_H
 
 #include <stdlib.h>
+#include <sys/socket.h>
+
+/**
+ * @brief An object that holds information about a network connection
+ * 
+ */
+typedef struct conn_info t_conn_info;
+
+typedef struct read_out {
+    enum type {
+        RO_SUCCESS,
+        RO_ERROR,
+        RO_DISCONNECT
+    } read_type;
+    size_t read_bytes;
+    int error_code;
+} t_read_out;
+
+/**
+ * @brief Creates a new t_conn_info object
+ * 
+ * @param block_size how many bytes to read at a time
+ * @param addr connection address
+ * @param addrlen lenth of @b addr
+ * @return [ @b t_conn_info* ] the t_conn_info object 
+ */
+t_conn_info *new_conn_info(int block_size, struct sockaddr addr, socklen_t addrlen);
+
+/**
+ * @brief Frees a t_conn_info object
+ * 
+ * @param ci the t_conn_info object
+ */
+void free_conn_info(t_conn_info *ci);
+
+/**
+ * @brief Set properties of the t_conn_info object
+ * 
+ * @param ci the t_conn_info object
+ * @param block_size how many bytes to read at a time
+ * @param addr connection address
+ * @param addrlen length of @b addr
+ */
+void set_conn_info(t_conn_info *ci, int block_size, struct sockaddr addr, socklen_t addrlen);
+
+/**
+ * @brief Checks whether there's pending data to read
+ * 
+ * @param ci the t_conn_info object
+ * @return [ @b int ] 1 if true, 0 if false 
+ */
+int has_available_data(t_conn_info *ci);
 
 /**
  * @brief Send an entire message through a socket
@@ -14,24 +66,15 @@
 int sendall(int sd, char *message, size_t size);
 
 /**
- * @brief Receive a number of bytes through a socket
- * 
- * @param sd socket file descriptor
- * @param buffer buffer to store the message
- * @param size size of the message to be received
- * @return [ @b int ] 0 if successfull, -1 otherwise
- */
-int recvall(int sd, char *buffer, size_t size);
-
-/**
- * @brief Receive a message through a socket until a delimitor character is reached
+ * @brief Receive a message through a socket
  * 
  * @param sd socket file descriptor
  * @param buffer buffer to store the message
  * @param delim delimitor character
  * @param max_size size of the buffer
- * @return [ @b int ] number of bytes read if successfull, -1 otherwise
+ * @param ci necessary information about the connection
+ * @return [ @b t_read_out ] structure describing the result
  */
-int recvall_delim(int sd, char *buffer, char delim, size_t max_size);
+t_read_out recv_message(int sd, char *buffer, char delim, size_t max_size, t_conn_info *ci);
 
 #endif

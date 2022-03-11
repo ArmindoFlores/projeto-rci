@@ -1,9 +1,51 @@
 #include "common.h"
 #include <sys/socket.h>
 #include <string.h>
+#include <stdio.h>
+#include <errno.h>
 
-static char *INTERNAL_BUFFER = NULL;
-static size_t BUFFER_SIZE = 0;
+struct conn_info {
+    char *buffer;
+    size_t buffer_size;
+    int block_size;
+    struct sockaddr addr;
+    socklen_t addrlen;
+};
+
+t_conn_info *new_conn_info(int block_size, struct sockaddr addr, socklen_t addrlen)
+{
+    t_conn_info *result = (t_conn_info*) malloc(sizeof(t_conn_info)); 
+    result->buffer = (char*) calloc(block_size, sizeof(char));
+    result->buffer_size = 0;
+    result->block_size = block_size;
+    result->addr = addr;
+    result->addrlen = addrlen;
+    return result;
+}
+
+void free_conn_info(t_conn_info *ci)
+{
+    free(ci->buffer);
+    free(ci);
+}
+
+void set_conn_info(t_conn_info *ci, int block_size, struct sockaddr addr, socklen_t addrlen)
+{
+    if (ci->block_size != block_size) {
+        free(ci->buffer);
+        ci->buffer = (char*) calloc(block_size, sizeof(char));
+    }
+
+    ci->buffer_size = 0;
+    ci->block_size = block_size;
+    ci->addr = addr;
+    ci->addrlen = addrlen;
+}
+
+int has_available_data(t_conn_info *ci)
+{
+    return ci->buffer_size > 0;
+}
 
 int sendall(int sd, char *message, size_t size)
 {
@@ -17,75 +59,66 @@ int sendall(int sd, char *message, size_t size)
     return 0;
 }
 
-int recvall(int sd, char *buffer, size_t size)
+t_read_out recv_message(int sd, char *buffer, char delim, size_t max_size, t_conn_info* ci)
 {
-    size_t received_bytes = 0;
-    // First unload from the buffer
-    if (BUFFER_SIZE) {
-        received_bytes += BUFFER_SIZE > size ? size : BUFFER_SIZE;
-        memcpy(buffer, INTERNAL_BUFFER, received_bytes);
-        BUFFER_SIZE -= received_bytes;
-        if (BUFFER_SIZE > 0) {
-            // If the buffer wasn't emptied, move everything to the start
-            memmove(INTERNAL_BUFFER, INTERNAL_BUFFER+received_bytes, BUFFER_SIZE);
+    t_read_out result;
+    memset(&result, 0, sizeof(result));
+    result.read_type = RO_ERROR;
+
+    if (ci->buffer_size) {
+        // There are still some bytes left in the buffer
+        char *delim_pos = memchr(ci->buffer, delim, ci->buffer_size);
+        if (delim_pos == NULL) // Not a full message
+            delim_pos = ci->buffer + ci->buffer_size - 1;
+        
+        size_t size = (delim_pos - ci->buffer) + 1;
+        size_t actual_size = size > max_size ? max_size : size;
+        memcpy(buffer, ci->buffer, actual_size);
+
+        if (actual_size < ci->buffer_size) {
+            // If the buffer wasn't emptied, move everything to the beginning
+            memmove(ci->buffer, ci->buffer+actual_size, ci->buffer_size-actual_size);
+        }
+        ci->buffer_size -= actual_size;
+
+        result.read_type = RO_SUCCESS;
+        result.read_bytes = actual_size;
+        return result;
+    }
+
+    // No bytes left in the buffer, read from the socket
+    ssize_t recvd = recv(sd, buffer, ci->block_size > max_size ? max_size : ci->block_size, 0);
+    if (recvd == 0) {
+        // Client disconnected
+        result.read_type = RO_DISCONNECT;
+        return result;
+    }
+    else if (recvd < 0) {
+        // An error occurred while reading
+        result.error_code = errno;
+        return result;
+    }
+
+    // Try to find the message delimiter
+    char *delim_pos = memchr(buffer, delim, recvd);
+    if (delim_pos == NULL) {
+        // Not a full message
+        result.read_bytes = recvd;
+    }
+    else {
+        // Full message, possibly more
+        if (delim_pos - buffer > 0) {
+            // There's more data after the message, copy it to the buffer
+            result.read_bytes = (size_t)(delim_pos-buffer) + 1;
+            memcpy(ci->buffer, delim_pos+1, recvd-result.read_bytes);
+            memset(delim_pos+1, 0, recvd-result.read_bytes);
+            ci->buffer_size = recvd-result.read_bytes;
+        }
+        else {
+            result.read_bytes = recvd;
         }
     }
 
-    // Receive until we have gathered *size* bytes
-    while (received_bytes < size) {
-        int recvd = recv(sd, buffer+received_bytes, size-received_bytes, 0);
-        if (recvd < 0) // Stop in case of an error
-            return recvd;
-        received_bytes += recvd;
-    }
-    return 0;
-}
-
-int recvall_delim(int sd, char *buffer, char delim, size_t max_size)
-{
-    int BLOCK_SIZE = 2048;
-    if (!INTERNAL_BUFFER) {
-        INTERNAL_BUFFER = (char*) malloc(BLOCK_SIZE * sizeof(char));
-        BUFFER_SIZE = 0;
-    }
-
-    size_t received_bytes = 0;
-    int recvd = BUFFER_SIZE < max_size ? BUFFER_SIZE : max_size;
-
-    if (BUFFER_SIZE) {
-        // Some data was left last time the function was run
-        memcpy(buffer, INTERNAL_BUFFER, recvd);
-        BUFFER_SIZE -= recvd;
-        if (BUFFER_SIZE > 0) {
-            // If the buffer wasn't emptied, move everything to the start
-            memmove(INTERNAL_BUFFER, INTERNAL_BUFFER+recvd, BUFFER_SIZE);
-        }
-    }
-
-    int found = 0;
-    do {
-        // Try to find the delimiter
-        for (size_t offset = 0; offset < recvd; offset++) {
-            if (buffer[received_bytes+offset] == delim) {
-                // Found the delimiter
-                if (offset < recvd-1) {
-                    // We've read too much, store it
-                    BUFFER_SIZE = recvd-offset-1;
-                    memcpy(INTERNAL_BUFFER, buffer+received_bytes+offset+1, BUFFER_SIZE);
-                    memset(buffer+received_bytes+offset+1, 0, BUFFER_SIZE);
-                }
-                found = 1;
-                received_bytes += offset + 1;
-                break;
-            }
-        }
-        if (!found) {
-            received_bytes += recvd;
-            // Read more data from socket FD
-            recvd = recv(sd, buffer+received_bytes, received_bytes+BLOCK_SIZE > max_size ? max_size : received_bytes+BLOCK_SIZE, 0);
-            if (recvd < 0)
-                return recvd;
-        }
-    } while (!found && received_bytes < max_size);
-    return (int) received_bytes;
+    result.read_type = RO_SUCCESS;
+    return result;
 }
