@@ -50,10 +50,12 @@ int has_available_data(t_conn_info *ci)
 void copy_conn_info(t_conn_info **dest, t_conn_info *src)
 {
     if (*dest == NULL) {
+        // If destination is not initialize, do it
         *dest = new_conn_info(src->block_size, src->addr, src->addrlen);
     }
     else {
         if ((*dest)->block_size != src->block_size) {
+            // If both objects have different block_sizes, allocate a new buffer to match
             free((*dest)->buffer);
             (*dest)->buffer = (char*) calloc(src->block_size, sizeof(char));
         }
@@ -64,7 +66,7 @@ void copy_conn_info(t_conn_info **dest, t_conn_info *src)
 
     (*dest)->buffer_size = src->buffer_size;
     if (src->buffer_size)
-        memcpy((*dest)->buffer, src->buffer, src->buffer_size);
+        memcpy((*dest)->buffer, src->buffer, src->buffer_size);  // Copy the buffer
 }
 
 void reset_conn_buffer(t_conn_info* ci)
@@ -94,10 +96,11 @@ t_read_out recv_message(int sd, char *buffer, char delim, size_t max_size, t_con
 
     if (ci->buffer_size) {
         // There are still some bytes left in the buffer
-        char *delim_pos = memchr(ci->buffer, delim, ci->buffer_size);
+        char *delim_pos = (char*) memchr(ci->buffer, delim, ci->buffer_size);
         if (delim_pos == NULL) // Not a full message
             delim_pos = ci->buffer + ci->buffer_size - 1;
         
+        // Calculate size and copy remaining data to user buffer
         size_t size = (delim_pos - ci->buffer) + 1;
         size_t actual_size = size > max_size ? max_size : size;
         memcpy(buffer, ci->buffer, actual_size);
@@ -127,7 +130,7 @@ t_read_out recv_message(int sd, char *buffer, char delim, size_t max_size, t_con
     }
 
     // Try to find the message delimiter
-    char *delim_pos = memchr(buffer, delim, recvd);
+    char *delim_pos = (char*) memchr(buffer, delim, recvd);
     if (delim_pos == NULL) {
         // Not a full message
         result.read_bytes = recvd;
@@ -138,6 +141,7 @@ t_read_out recv_message(int sd, char *buffer, char delim, size_t max_size, t_con
             // There's more data after the message, copy it to the buffer
             result.read_bytes = (size_t)(delim_pos-buffer) + 1;
             memcpy(ci->buffer, delim_pos+1, recvd-result.read_bytes);
+            // We wrote too much to the user buffer, clear it
             memset(delim_pos+1, 0, recvd-result.read_bytes);
             ci->buffer_size = recvd-result.read_bytes;
         }

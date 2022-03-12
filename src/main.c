@@ -14,6 +14,7 @@ char* get_event_string(t_event e)
 
 int main()
 {
+    // Create the server
     t_error_or_serverinfo *esi = init_server("8008");
     if (is_error(esi)) {
         printf("Error initializing server!\n");
@@ -24,24 +25,34 @@ int main()
     t_serverinfo *si = get_serverinfo(esi);
     free(esi);
 
+    // Main loop
     while (1) {
         printf("Waiting for events...\n");
+
+        // This calls select() and may block
+        // Returns after an event happens
         t_event e = select_event(si);
         printf("Got new event '%s'\n", get_event_string(e));
 
         int result = 0;
+        // Act based on what event just occurred
         switch (e) {
             case E_INCOMING_CONNECTION:
+                // A client is trying to connect to us
                 result = process_incoming_connection(si);
                 break;
 
             case E_MESSAGE_TEMP:
+                // A new connection has sent a message
                 result = process_message_temp(si);
                 break;
 
             case E_MESSAGE_SUCCESSOR:
+                // This node's successor sent a message
                 result = process_message_successor(si);
                 break;
+
+            // TODO: We're missing E_MESSAGE_PREDECESSOR
 
             default:
                 break;
