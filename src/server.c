@@ -64,6 +64,7 @@ t_error_or_serverinfo* init_server(const char* port)
     result->si = (t_serverinfo*) malloc(sizeof(t_serverinfo));
     init_serverinfo(result->si);
 
+    // Try to create a socket for TCP connections
     int mainfd = socket(AF_INET, SOCK_STREAM, 0);
     if (mainfd == -1) {
         free_serverinfo(result->si);
@@ -77,16 +78,19 @@ t_error_or_serverinfo* init_server(const char* port)
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
 
+    // Get address info
     if (getaddrinfo(NULL, port, &hints, &res) != 0) {
         free_serverinfo(result->si);
         return result;
     }
 
+    // Bind this address
     if (bind(mainfd, res->ai_addr, res->ai_addrlen) == -1) {
         free_serverinfo(result->si);
         return result;
     }
 
+    // Start listening for connections
     if (listen(mainfd, 5) == -1) {
         free_serverinfo(result->si);
         return result;
@@ -170,6 +174,7 @@ int process_incoming_connection(t_serverinfo *si)
     struct sockaddr addr;
     socklen_t addrlen = sizeof(addr);
 
+    // Accept the connection
     int newfd = accept(si->mainfd, &addr, &addrlen);
     if (newfd == -1)
         return -1;
@@ -183,6 +188,7 @@ int process_incoming_connection(t_serverinfo *si)
 
     puts("Accepted connection");
 
+    // Save connection information in si->temp and the socket fd in si->tempfd
     si->tempfd = newfd;
     if (si->temp == NULL)
         si->temp = new_conn_info(2048, addr, addrlen);
@@ -191,6 +197,12 @@ int process_incoming_connection(t_serverinfo *si)
     return 0;
 }
 
+/**
+ * @brief Reset buffer size, close and set tempfd to -1
+ * 
+ * @param buffer_size 
+ * @param tempfd 
+ */
 void reset_pmt(size_t *buffer_size, int *tempfd)
 {
     close(*tempfd);
@@ -198,10 +210,22 @@ void reset_pmt(size_t *buffer_size, int *tempfd)
     *buffer_size = 0;
 }
 
+/**
+ * @brief Process an incoming message and update internal buffers
+ * 
+ * @param sfd socket file descriptor
+ * @param buffer buffer to store the received message in
+ * @param buffer_size current size of buffer
+ * @param max_buffer_size maximum possible buffer size
+ * @param ci necessary information about the connection
+ * @return [ @b t_read_out ] structure describing the result 
+ */
 t_read_out process_incoming(int *sfd, char *buffer, size_t *buffer_size, size_t max_buffer_size, t_conn_info *ci)
 {
+    // Receive message (either from socker or internal buffers)
     t_read_out ro = recv_message(*sfd, buffer+(*buffer_size), '\n', max_buffer_size-(*buffer_size)-1, ci);
     if (ro.read_type == RO_SUCCESS) {
+        // Successfully read, update buffer
         *buffer_size += ro.read_bytes;
         if (*buffer_size >= max_buffer_size-1 && buffer[max_buffer_size-1] != '\n') {
             // This is already an invalid message (too big)
@@ -212,6 +236,7 @@ t_read_out process_incoming(int *sfd, char *buffer, size_t *buffer_size, size_t 
         }
     }
     else if (ro.read_type == RO_ERROR) {
+        // An error occurred while receiving
         reset_pmt(buffer_size, sfd);
         return ro;
     }
@@ -222,6 +247,7 @@ t_read_out process_incoming(int *sfd, char *buffer, size_t *buffer_size, size_t 
         return ro;
     }
 
+    // Make sure the buffer is a null terminated string
     buffer[*buffer_size] = '\0';
     
     printf("Buffer: %s (rb=%ld, bs=%ld)\n", buffer, ro.read_bytes, *buffer_size);
@@ -231,7 +257,11 @@ t_read_out process_incoming(int *sfd, char *buffer, size_t *buffer_size, size_t 
 
 int process_message_successor(t_serverinfo *si)
 {
+    //! This function is a work-in-progress
+    // This is the internal buffer that keep track of what has been
+    // sent through si->nextfd
     static char buffer[64];
+    // This is the current size of the internal buffer
     static size_t buffer_size = 0;
 
     t_read_out ro = process_incoming(&si->nextfd, buffer, &buffer_size, sizeof(buffer), si->successor);
@@ -254,9 +284,14 @@ int process_message_successor(t_serverinfo *si)
 
 int process_message_temp(t_serverinfo *si)
 {
+    // This is the internal buffer that keep track of what has been
+    // sent through si->tempfd
     static char buffer[64];
+
+    // This is the current size of the internal buffer
     static size_t buffer_size = 0;
 
+    // Receive message and update buffer
     t_read_out ro = process_incoming(&si->tempfd, buffer, &buffer_size, sizeof(buffer), si->temp);
     if (ro.read_type == RO_ERROR)
         return ro.error_code;
@@ -277,28 +312,34 @@ int process_message_temp(t_serverinfo *si)
         return 0;
     }
 
+    // Find the node identifier, IP and port  
+    
+    // Pointer to the ' ' character before the node identifier
     char *i_start = strchr(buffer, ' ');
     if (i_start == NULL) {
         // Message is invalid
         reset_pmt(&buffer_size, &si->tempfd);
-        puts("Discarded message: no i_start");
+        puts("Discarded message: no identifier specified");
         return 0;
     }
+    // Pointer to the ' ' character before the node IP
     char *ip_start = strchr(i_start+1, ' ');
     if (ip_start == NULL) {
         // Message is invalid
         reset_pmt(&buffer_size, &si->tempfd);
-        puts("Discarded message: no ip_start");
+        puts("Discarded message: no IP specified");
         return 0;
     }
+    // Pointer to the ' ' character before the node port
     char *port_start = strchr(ip_start+1, ' ');
     if (port_start == NULL) {
         // Message is invalid
         reset_pmt(&buffer_size, &si->tempfd);
-        puts("Discarded message: no port_start");
+        puts("Discarded message: no port specified");
         return 0;
     }
 
+    // This buffer will be used to convert strings to other data types
     char convert_buffer[64];
 
     // Find node_i
@@ -310,6 +351,7 @@ int process_message_temp(t_serverinfo *si)
         printf("Discarded message: no node_i is not a number (%s)\n", convert_buffer);
         return 0;
     }
+    // Node identifier
     int node_i = strtoui(convert_buffer);
 
     // Find node_ip
@@ -321,6 +363,7 @@ int process_message_temp(t_serverinfo *si)
         printf("Discarded message: no node_ip is not an ip (%s)\n", convert_buffer);
         return 0;
     }
+    // Node IP address
     char node_ip[16];
     strcpy(node_ip, convert_buffer);
 
@@ -333,6 +376,7 @@ int process_message_temp(t_serverinfo *si)
         printf("Discarded message: no node_port is not a number (%s)\n", convert_buffer);
         return 0;
     }
+    // Node port
     int node_port = strtoui(convert_buffer);
 
     // reset_pmt(&buffer_size, &si->tempfd);
@@ -340,8 +384,10 @@ int process_message_temp(t_serverinfo *si)
     buffer_size = 0;
 
     if (si->nextfd != -1) {
-        // Let the current successor know it has a new predecessor
+        // Message to be sent
         char message[64] = "";
+
+        // Let the current successor know it has a new predecessor
         sprintf(message, "PRED %d %s %d\n", node_i, node_ip, node_port);
         int result = sendall(si->nextfd, message, strlen(message));
         if (result < 0) {
