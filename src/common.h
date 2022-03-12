@@ -10,12 +10,14 @@
  */
 typedef struct conn_info t_conn_info;
 
+enum type {
+    RO_SUCCESS,
+    RO_ERROR,
+    RO_DISCONNECT
+};
+
 typedef struct read_out {
-    enum type {
-        RO_SUCCESS,
-        RO_ERROR,
-        RO_DISCONNECT
-    } read_type;
+    enum type read_type;
     size_t read_bytes;
     int error_code;
 } t_read_out;
