@@ -416,9 +416,17 @@ int process_message_temp(t_serverinfo *si)
         }
     }
 
+    // Set this node's successor to be the current connection
     si->nextfd = si->tempfd;
     copy_conn_info(&si->successor, si->temp);
-    reset_conn_buffer(si->temp);
+
+    if (si->prevfd == -1) {
+        // This node is the first node in the ring -> close the cycle
+        si->prevfd = si->tempfd;
+        copy_conn_info(&si->predecessor, si->temp);
+    }
+
+    reset_conn_buffer(si->temp);   
     si->tempfd = -1;
 
     return 0;
