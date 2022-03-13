@@ -9,77 +9,32 @@
 #include <unistd.h>
 #include <netdb.h>
 #include <string.h>
-#define MAX(x, y) (x > y ? x : y)
 
-struct serverinfo {
-    // Server socket file descriptor
-    int mainfd;
-    // Predecessor's connection's socket file descriptor (-1 if a connection does not exist)
-    int prevfd;
-    // Successor's connection's socket file descriptor (-1 if a connection does not exist)
-    int nextfd;
-    // Socket file descriptor of a temporary connection (-1 if a connection does not exist)
-    int tempfd;
-    // Connection information pertaining to this node's predecessor (NULL if a connection does not exist)
-    t_conn_info *predecessor;
-    // Connection information pertaining to this node's successor (NULL if a connection does not exist)
-    t_conn_info *successor;
-    // Temporary connection information (NULL if a connection does not exist)
-    t_conn_info *temp;
-};
-
-struct error_or_serverinfo {
+struct error_or_nodeinfo {
     int is_error;
-    t_serverinfo *si;
+    t_nodeinfo *si;
 };
 
-void init_serverinfo(t_serverinfo *si)
-{
-    si->mainfd = -1;
-    si->prevfd = -1;
-    si->nextfd = -1;
-    si->tempfd = -1;
-    si->predecessor = NULL;
-    si->successor = NULL;
-    si->temp = NULL;
-}
-
-int maxfd(t_serverinfo *si)
-{
-    int mx = MAX(si->mainfd, si->prevfd);
-    mx = MAX(mx, si->nextfd);
-    mx = MAX(mx, si->tempfd);
-    return mx;
-}
-
-void free_serverinfo(t_serverinfo *si)
-{
-    free(si->predecessor);
-    free(si->successor);
-    free(si);
-}
-
-int is_error(t_error_or_serverinfo *esi)
+int is_error(t_error_or_nodeinfo *esi)
 {
     return esi->is_error < 0;
 }
 
-t_serverinfo* get_serverinfo(t_error_or_serverinfo *esi)
+t_nodeinfo* get_nodeinfo(t_error_or_nodeinfo *esi)
 {
     return esi->si;
 }
 
-t_error_or_serverinfo* init_server(const char* port)
+t_error_or_nodeinfo* init_server(const char* port)
 {
-    t_error_or_serverinfo *result = (t_error_or_serverinfo*) malloc(sizeof(t_error_or_serverinfo));
+    t_error_or_nodeinfo *result = (t_error_or_nodeinfo*) malloc(sizeof(t_error_or_nodeinfo));
     result->is_error = 1; // Assume it's an error
-    result->si = (t_serverinfo*) malloc(sizeof(t_serverinfo));
-    init_serverinfo(result->si);
+    result->si = new_nodeinfo();
 
     // Try to create a socket for TCP connections
     int mainfd = socket(AF_INET, SOCK_STREAM, 0);
     if (mainfd == -1) {
-        free_serverinfo(result->si);
+        free_nodeinfo(result->si);
         return result;
     }
     result->si->mainfd = mainfd;
@@ -92,19 +47,19 @@ t_error_or_serverinfo* init_server(const char* port)
 
     // Get address info
     if (getaddrinfo(NULL, port, &hints, &res) != 0) {
-        free_serverinfo(result->si);
+        free_nodeinfo(result->si);
         return result;
     }
 
     // Bind this address
     if (bind(mainfd, res->ai_addr, res->ai_addrlen) == -1) {
-        free_serverinfo(result->si);
+        free_nodeinfo(result->si);
         return result;
     }
 
     // Start listening for connections
     if (listen(mainfd, 5) == -1) {
-        free_serverinfo(result->si);
+        free_nodeinfo(result->si);
         return result;
     }
     
@@ -114,7 +69,7 @@ t_error_or_serverinfo* init_server(const char* port)
     //! Missing: also init UDP server
 }
 
-t_event select_event(t_serverinfo* si)
+t_event select_event(t_nodeinfo* si)
 {
     // If there's pending reads in any of the connections, do them first
     if (si->nextfd > 0 && has_available_data(si->successor))
@@ -167,7 +122,7 @@ t_event select_event(t_serverinfo* si)
     return E_ERROR;
 }
 
-void close_server(t_serverinfo* si)
+void close_server(t_nodeinfo* si)
 {
     if (si->mainfd >= 0)
         close(si->mainfd);
@@ -178,10 +133,10 @@ void close_server(t_serverinfo* si)
     if (si->tempfd >= 0)
         close(si->tempfd);
 
-    free_serverinfo(si);
+    free_nodeinfo(si);
 }
 
-int process_incoming_connection(t_serverinfo *si)
+int process_incoming_connection(t_nodeinfo *si)
 {
     struct sockaddr addr;
     socklen_t addrlen = sizeof(addr);
@@ -210,15 +165,15 @@ int process_incoming_connection(t_serverinfo *si)
 }
 
 /**
- * @brief Reset buffer size, close and set tempfd to -1
+ * @brief Reset buffer size, close and set fd to -1
  * 
  * @param buffer_size 
- * @param tempfd 
+ * @param fd 
  */
-void reset_pmt(size_t *buffer_size, int *tempfd)
+void reset_pmt(size_t *buffer_size, int *fd)
 {
-    close(*tempfd);
-    *tempfd = -1;
+    close(*fd);
+    *fd = -1;
     *buffer_size = 0;
 }
 
@@ -254,7 +209,6 @@ t_read_out process_incoming(int *sfd, char *buffer, size_t *buffer_size, size_t 
     }
     else if (ro.read_type == RO_DISCONNECT) {
         // Client closed the connection
-        reset_pmt(buffer_size, sfd);
         puts("Client disconnected");
         return ro;
     }
@@ -267,7 +221,7 @@ t_read_out process_incoming(int *sfd, char *buffer, size_t *buffer_size, size_t 
     return ro;
 }
 
-int process_message_successor(t_serverinfo *si)
+int process_message_successor(t_nodeinfo *si)
 {
     //! This function is a work-in-progress
     // This is the internal buffer that keep track of what has been
@@ -281,6 +235,11 @@ int process_message_successor(t_serverinfo *si)
         return ro.error_code;
     if (ro.read_type == RO_DISCONNECT) {
         // !! Successor has disconnected!
+        if (si->nextfd == si->prevfd) {
+            // This is a two-node network
+            si->prevfd = -1;
+        }
+        reset_pmt(&buffer_size, &si->nextfd);
         return 0;
     }
 
@@ -294,7 +253,7 @@ int process_message_successor(t_serverinfo *si)
     return 0;
 }
 
-int process_message_temp(t_serverinfo *si)
+int process_message_temp(t_nodeinfo *si)
 {
     // This is the internal buffer that keep track of what has been
     // sent through si->tempfd
@@ -307,8 +266,10 @@ int process_message_temp(t_serverinfo *si)
     t_read_out ro = process_incoming(&si->tempfd, buffer, &buffer_size, sizeof(buffer), si->temp);
     if (ro.read_type == RO_ERROR)
         return ro.error_code;
-    if (ro.read_type == RO_DISCONNECT)
+    if (ro.read_type == RO_DISCONNECT) {
+        reset_pmt(&buffer_size, &si->tempfd);
         return 0;
+    }
 
     if (buffer[buffer_size-1] != '\n') {
         // We might not have received the whole message yet

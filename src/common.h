@@ -9,6 +9,22 @@
  * 
  */
 typedef struct conn_info t_conn_info;
+typedef struct nodeinfo {
+    // Server socket file descriptor
+    int mainfd;
+    // Predecessor's connection's socket file descriptor (-1 if a connection does not exist)
+    int prevfd;
+    // Successor's connection's socket file descriptor (-1 if a connection does not exist)
+    int nextfd;
+    // Socket file descriptor of a temporary connection (-1 if a connection does not exist)
+    int tempfd;
+    // Connection information pertaining to this node's predecessor (NULL if a connection does not exist)
+    t_conn_info *predecessor;
+    // Connection information pertaining to this node's successor (NULL if a connection does not exist)
+    t_conn_info *successor;
+    // Temporary connection information (NULL if a connection does not exist)
+    t_conn_info *temp;
+} t_nodeinfo;
 
 enum type {
     RO_SUCCESS,
@@ -71,6 +87,26 @@ void set_conn_info(t_conn_info *ci, int block_size, struct sockaddr addr, sockle
  * @return [ @b int ] 1 if true, 0 if false 
  */
 int has_available_data(t_conn_info *ci);
+
+/**
+ * @brief Creates a new t_nodeinfo object
+ */
+t_nodeinfo *new_nodeinfo();
+
+/**
+ * @brief Returns the largest file descriptor used by the object
+ * 
+ * @param si the t_nodeinfo object
+ * @return int the largest used file descriptor
+ */
+int maxfd(t_nodeinfo *si);
+
+/**
+ * @brief Frees a t_nodeinfo object
+ * 
+ * @param si the t_nodeinfo object
+ */
+void free_nodeinfo(t_nodeinfo *si);
 
 /**
  * @brief Send an entire message through a socket

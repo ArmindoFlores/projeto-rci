@@ -3,8 +3,7 @@
 
 #include "common.h"
 
-typedef struct serverinfo t_serverinfo;
-typedef struct error_or_serverinfo t_error_or_serverinfo;
+typedef struct error_or_nodeinfo t_error_or_nodeinfo;
 typedef enum event {
     E_INCOMING_CONNECTION,
     E_MESSAGE_PREDECESSOR,
@@ -16,27 +15,27 @@ typedef enum event {
 /**
  * @brief Verifies if the struct contains an error
  * 
- * @param esi the t_error_or_serverinfo structure
+ * @param esi the t_error_or_nodeinfo structure
  * @return [ @b int ] 1 if true, 0 if false 
  */
-int is_error(t_error_or_serverinfo *esi);
+int is_error(t_error_or_nodeinfo *esi);
 
 /**
- * @brief Get the serverinfo object from a t_error_or_serverinfo structure
+ * @brief Get the nodeinfo object from a t_error_or_nodeinfo structure
  * 
- * @param esi the t_error_or_serverinfo structure
- * @return [ @b t_serverinfo* ] the t_serverinfo object
+ * @param esi the t_error_or_nodeinfo structure
+ * @return [ @b t_nodeinfo* ] the t_nodeinfo object
  */
-t_serverinfo* get_serverinfo(t_error_or_serverinfo *esi);
+t_nodeinfo* get_nodeinfo(t_error_or_nodeinfo *esi);
 
 /**
  * @brief Creates a new server listening on the specified port
  * 
  * @param port the port to listen on
- * @return [ @b t_error_or_serverinfo ] if !is_error(&result), then get_serverinfo(&result)
+ * @return [ @b t_error_or_nodeinfo ] if !is_error(&result), then get_nodeinfo(&result)
  * contains all information about the server
  */
-t_error_or_serverinfo* init_server(const char* port);
+t_error_or_nodeinfo* init_server(const char* port);
 
 /**
  * @brief Blocks until an event occurrs, then returns it
@@ -44,14 +43,14 @@ t_error_or_serverinfo* init_server(const char* port);
  * @param si necessary information about the server
  * @return [ @b t_event ] what event has occurred
  */
-t_event select_event(t_serverinfo* si);
+t_event select_event(t_nodeinfo* si);
 
 /**
  * @brief Closes the server and frees associated memory
  * 
  * @param si necessary information about the server
  */
-void close_server(t_serverinfo* si);
+void close_server(t_nodeinfo* si);
 
 /**
  * @brief Process an incoming connection
@@ -59,7 +58,7 @@ void close_server(t_serverinfo* si);
  * @param si necessary information about the server
  * @return [ @b int ] 0 if successfull, -1 otherwise 
  */
-int process_incoming_connection(t_serverinfo *si);
+int process_incoming_connection(t_nodeinfo *si);
 
 /**
  * @brief Process an incoming message from a temporary connection
@@ -67,7 +66,7 @@ int process_incoming_connection(t_serverinfo *si);
  * @param si necessary information about the server
  * @return [ @b int ] 0 if successfull, -1 otherwise 
  */
-int process_message_temp(t_serverinfo *si);
+int process_message_temp(t_nodeinfo *si);
 
 /**
  * @brief Process an incoming message from this node's successor
@@ -75,6 +74,6 @@ int process_message_temp(t_serverinfo *si);
  * @param si necessary information about the server
  * @return [ @b int ] 0 if successfull, -1 otherwise 
  */
-int process_message_successor(t_serverinfo *si);
+int process_message_successor(t_nodeinfo *si);
 
 #endif

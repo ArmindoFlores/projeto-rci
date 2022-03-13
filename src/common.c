@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
+#define MAX(x, y) (x > y ? x : y)
 
 struct conn_info {
     char *buffer;
@@ -72,6 +73,34 @@ void copy_conn_info(t_conn_info **dest, t_conn_info *src)
 void reset_conn_buffer(t_conn_info* ci)
 {
     ci->buffer_size = 0;
+}
+
+t_nodeinfo *new_nodeinfo()
+{
+    t_nodeinfo *si = (t_nodeinfo*) malloc(sizeof(t_nodeinfo));
+    si->mainfd = -1;
+    si->prevfd = -1;
+    si->nextfd = -1;
+    si->tempfd = -1;
+    si->predecessor = NULL;
+    si->successor = NULL;
+    si->temp = NULL;
+    return si;
+}
+
+int maxfd(t_nodeinfo *si)
+{
+    int mx = MAX(si->mainfd, si->prevfd);
+    mx = MAX(mx, si->nextfd);
+    mx = MAX(mx, si->tempfd);
+    return mx;
+}
+
+void free_nodeinfo(t_nodeinfo *si)
+{
+    free(si->predecessor);
+    free(si->successor);
+    free(si);
 }
 
 int sendall(int sd, char *message, size_t size)

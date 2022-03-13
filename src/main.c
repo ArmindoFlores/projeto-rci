@@ -15,14 +15,14 @@ char* get_event_string(t_event e)
 int main()
 {
     // Create the server
-    t_error_or_serverinfo *esi = init_server("8008");
+    t_error_or_nodeinfo *esi = init_server("8008");
     if (is_error(esi)) {
         printf("Error initializing server!\n");
         free(esi);
         exit(1);
     }
 
-    t_serverinfo *si = get_serverinfo(esi);
+    t_nodeinfo *si = get_nodeinfo(esi);
     free(esi);
 
     // Main loop
