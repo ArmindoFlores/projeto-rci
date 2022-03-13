@@ -12,8 +12,20 @@
 #define MAX(x, y) (x > y ? x : y)
 
 struct serverinfo {
-    int mainfd, prevfd, nextfd, tempfd;
-    t_conn_info *predecessor, *successor, *temp;
+    // Server socket file descriptor
+    int mainfd;
+    // Predecessor's connection's socket file descriptor (-1 if a connection does not exist)
+    int prevfd;
+    // Successor's connection's socket file descriptor (-1 if a connection does not exist)
+    int nextfd;
+    // Socket file descriptor of a temporary connection (-1 if a connection does not exist)
+    int tempfd;
+    // Connection information pertaining to this node's predecessor (NULL if a connection does not exist)
+    t_conn_info *predecessor;
+    // Connection information pertaining to this node's successor (NULL if a connection does not exist)
+    t_conn_info *successor;
+    // Temporary connection information (NULL if a connection does not exist)
+    t_conn_info *temp;
 };
 
 struct error_or_serverinfo {
