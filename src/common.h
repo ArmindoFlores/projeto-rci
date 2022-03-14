@@ -10,6 +10,8 @@
  */
 typedef struct conn_info t_conn_info;
 typedef struct nodeinfo {
+    // Node key
+    unsigned int key;
     // Server socket file descriptor
     int mainfd;
     // Predecessor's connection's socket file descriptor (-1 if a connection does not exist)
