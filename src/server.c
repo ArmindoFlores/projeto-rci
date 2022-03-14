@@ -10,34 +10,14 @@
 #include <netdb.h>
 #include <string.h>
 
-struct error_or_nodeinfo {
-    int is_error;
-    t_nodeinfo *si;
-};
-
-int is_error(t_error_or_nodeinfo *esi)
+int init_server(const char* port, t_nodeinfo *ni)
 {
-    return esi->is_error < 0;
-}
-
-t_nodeinfo* get_nodeinfo(t_error_or_nodeinfo *esi)
-{
-    return esi->si;
-}
-
-t_error_or_nodeinfo* init_server(const char* port)
-{
-    t_error_or_nodeinfo *result = (t_error_or_nodeinfo*) malloc(sizeof(t_error_or_nodeinfo));
-    result->is_error = 1; // Assume it's an error
-    result->si = new_nodeinfo();
-
     // Try to create a socket for TCP connections
     int mainfd = socket(AF_INET, SOCK_STREAM, 0);
     if (mainfd == -1) {
-        free_nodeinfo(result->si);
-        return result;
+        return -1;
     }
-    result->si->mainfd = mainfd;
+    ni->mainfd = mainfd;
 
     struct addrinfo hints, *res;
     memset(&hints, 0, sizeof(hints));
@@ -47,53 +27,47 @@ t_error_or_nodeinfo* init_server(const char* port)
 
     // Get address info
     if (getaddrinfo(NULL, port, &hints, &res) != 0) {
-        free_nodeinfo(result->si);
-        return result;
+        return -1;
     }
 
     // Bind this address
     if (bind(mainfd, res->ai_addr, res->ai_addrlen) == -1) {
-        free_nodeinfo(result->si);
-        return result;
+        return -1;
     }
 
     // Start listening for connections
     if (listen(mainfd, 5) == -1) {
-        free_nodeinfo(result->si);
-        return result;
+        return -1;
     }
-    
-    result->is_error = 0;
-    return result;
 
-    //! Missing: also init UDP server
+    return 0;
 }
 
-t_event select_event(t_nodeinfo* si)
+t_event select_event(t_nodeinfo* ni)
 {
     // If there's pending reads in any of the connections, do them first
-    if (si->nextfd > 0 && has_available_data(si->successor))
+    if (ni->nextfd > 0 && has_available_data(ni->successor))
         return E_MESSAGE_SUCCESSOR;
-    if (si->prevfd > 0 && has_available_data(si->predecessor))
+    if (ni->prevfd > 0 && has_available_data(ni->predecessor))
         return E_MESSAGE_PREDECESSOR;
-    if (si->tempfd > 0 && has_available_data(si->temp))
+    if (ni->tempfd > 0 && has_available_data(ni->temp))
         return E_MESSAGE_TEMP;
 
     // Initialize file descriptor set
     fd_set read_fds;
     FD_ZERO(&read_fds); 
-    int fdmax = maxfd(si);
+    int fdmax = maxfd(ni);
     fdmax = fdmax > STDIN_FILENO ? fdmax : STDIN_FILENO;
 
     // Add currently in-use file descriptors to the set
     FD_SET(STDIN_FILENO, &read_fds);
-    FD_SET(si->mainfd, &read_fds);
-    if (si->nextfd > 0)
-        FD_SET(si->nextfd, &read_fds);
-    if (si->prevfd > 0)
-        FD_SET(si->prevfd, &read_fds);
-    if (si->tempfd > 0)
-        FD_SET(si->tempfd, &read_fds);
+    FD_SET(ni->mainfd, &read_fds);
+    if (ni->nextfd > 0)
+        FD_SET(ni->nextfd, &read_fds);
+    if (ni->prevfd > 0)
+        FD_SET(ni->prevfd, &read_fds);
+    if (ni->tempfd > 0)
+        FD_SET(ni->tempfd, &read_fds);
 
     int count = select(fdmax+1, &read_fds, NULL, NULL, NULL);
     if (count < 0) {
@@ -102,24 +76,24 @@ t_event select_event(t_nodeinfo* si)
     }
     while (count--) {
         // Check for ready fd's with FD_ISSET
-        if (FD_ISSET(si->mainfd, &read_fds)) {
+        if (FD_ISSET(ni->mainfd, &read_fds)) {
             // Incoming connection
-            FD_CLR(si->mainfd, &read_fds);
+            FD_CLR(ni->mainfd, &read_fds);
             return E_INCOMING_CONNECTION;
         }
-        else if (FD_ISSET(si->nextfd, &read_fds)) {
+        else if (FD_ISSET(ni->nextfd, &read_fds)) {
             // Incoming message from successor
-            FD_CLR(si->nextfd, &read_fds);
+            FD_CLR(ni->nextfd, &read_fds);
             return E_MESSAGE_SUCCESSOR;
         }
-        else if (FD_ISSET(si->prevfd, &read_fds)) {
+        else if (FD_ISSET(ni->prevfd, &read_fds)) {
             // Incoming message from predecessor
-            FD_CLR(si->prevfd, &read_fds);
+            FD_CLR(ni->prevfd, &read_fds);
             return E_MESSAGE_PREDECESSOR;
         }
-        else if (FD_ISSET(si->tempfd, &read_fds)) {
+        else if (FD_ISSET(ni->tempfd, &read_fds)) {
             // Incoming message from somewhere else
-            FD_CLR(si->tempfd, &read_fds);
+            FD_CLR(ni->tempfd, &read_fds);
             return E_MESSAGE_TEMP;
         }
         else if (FD_ISSET(STDIN_FILENO, &read_fds)) {
@@ -127,35 +101,34 @@ t_event select_event(t_nodeinfo* si)
             return E_MESSAGE_USER;
         }
     }
+    printf("[6] ni->tempfd = %d\n", ni->tempfd);
 
     return E_ERROR;
 }
 
-void close_server(t_nodeinfo* si)
+void close_server(t_nodeinfo *ni)
 {
-    if (si->mainfd >= 0)
-        close(si->mainfd);
-    if (si->prevfd >= 0)
-        close(si->prevfd);
-    if (si->nextfd >= 0)
-        close(si->nextfd);
-    if (si->tempfd >= 0)
-        close(si->tempfd);
-
-    free_nodeinfo(si);
+    if (ni->mainfd >= 0)
+        close(ni->mainfd);
+    if (ni->prevfd >= 0)
+        close(ni->prevfd);
+    if (ni->nextfd >= 0)
+        close(ni->nextfd);
+    if (ni->tempfd >= 0)
+        close(ni->tempfd);
 }
 
-int process_incoming_connection(t_nodeinfo *si)
+int process_incoming_connection(t_nodeinfo *ni)
 {
     struct sockaddr addr;
     socklen_t addrlen = sizeof(addr);
 
     // Accept the connection
-    int newfd = accept(si->mainfd, &addr, &addrlen);
+    int newfd = accept(ni->mainfd, &addr, &addrlen);
     if (newfd == -1)
         return -1;
 
-    if (si->tempfd >= 0 || si->nextfd > 0) {
+    if (ni->tempfd >= 0 || ni->nextfd > 0) {
         // We already have a connection being established, reject this one
         puts("Rejected connection!");
         close(newfd);
@@ -164,12 +137,12 @@ int process_incoming_connection(t_nodeinfo *si)
 
     puts("Accepted connection");
 
-    // Save connection information in si->temp and the socket fd in si->tempfd
-    si->tempfd = newfd;
-    if (si->temp == NULL)
-        si->temp = new_conn_info(2048, addr, addrlen);
+    // Save connection information in ni->temp and the socket fd in ni->tempfd
+    ni->tempfd = newfd;
+    if (ni->temp == NULL)
+        ni->temp = new_conn_info(2048, addr, addrlen);
     else
-        set_conn_info(si->temp, 2048, addr, addrlen);
+        set_conn_info(ni->temp, 2048, addr, addrlen);
     return 0;
 }
 
@@ -230,25 +203,25 @@ t_read_out process_incoming(int *sfd, char *buffer, size_t *buffer_size, size_t 
     return ro;
 }
 
-int process_message_successor(t_nodeinfo *si)
+int process_message_successor(t_nodeinfo *ni)
 {
     //! This function is a work-in-progress
     // This is the internal buffer that keep track of what has been
-    // sent through si->nextfd
+    // sent through ni->nextfd
     static char buffer[64];
     // This is the current size of the internal buffer
     static size_t buffer_size = 0;
 
-    t_read_out ro = process_incoming(&si->nextfd, buffer, &buffer_size, sizeof(buffer), si->successor);
+    t_read_out ro = process_incoming(&ni->nextfd, buffer, &buffer_size, sizeof(buffer), ni->successor);
     if (ro.read_type == RO_ERROR)
         return ro.error_code;
     if (ro.read_type == RO_DISCONNECT) {
         // !! Successor has disconnected!
-        if (si->nextfd == si->prevfd) {
+        if (ni->nextfd == ni->prevfd) {
             // This is a two-node network
-            si->prevfd = -1;
+            ni->prevfd = -1;
         }
-        reset_pmt(&buffer_size, &si->nextfd);
+        reset_pmt(&buffer_size, &ni->nextfd);
         return 0;
     }
 
@@ -262,21 +235,21 @@ int process_message_successor(t_nodeinfo *si)
     return 0;
 }
 
-int process_message_temp(t_nodeinfo *si)
+int process_message_temp(t_nodeinfo *ni)
 {
     // This is the internal buffer that keep track of what has been
-    // sent through si->tempfd
+    // sent through ni->tempfd
     static char buffer[64];
 
     // This is the current size of the internal buffer
     static size_t buffer_size = 0;
 
     // Receive message and update buffer
-    t_read_out ro = process_incoming(&si->tempfd, buffer, &buffer_size, sizeof(buffer), si->temp);
+    t_read_out ro = process_incoming(&ni->tempfd, buffer, &buffer_size, sizeof(buffer), ni->temp);
     if (ro.read_type == RO_ERROR)
         return ro.error_code;
     if (ro.read_type == RO_DISCONNECT) {
-        reset_pmt(&buffer_size, &si->tempfd);
+        reset_pmt(&buffer_size, &ni->tempfd);
         return 0;
     }
 
@@ -289,7 +262,7 @@ int process_message_temp(t_nodeinfo *si)
     // Message should be of the format <SELF i i.IP i.port\n>
     if (strncmp(buffer, "SELF ", 5) != 0) {
         // Message is invalid
-        reset_pmt(&buffer_size, &si->tempfd);
+        reset_pmt(&buffer_size, &ni->tempfd);
         puts("Discarded message: length, termination or header");
         return 0;
     }
@@ -300,7 +273,7 @@ int process_message_temp(t_nodeinfo *si)
     char *i_start = strchr(buffer, ' ');
     if (i_start == NULL) {
         // Message is invalid
-        reset_pmt(&buffer_size, &si->tempfd);
+        reset_pmt(&buffer_size, &ni->tempfd);
         puts("Discarded message: no identifier specified");
         return 0;
     }
@@ -308,7 +281,7 @@ int process_message_temp(t_nodeinfo *si)
     char *ip_start = strchr(i_start+1, ' ');
     if (ip_start == NULL) {
         // Message is invalid
-        reset_pmt(&buffer_size, &si->tempfd);
+        reset_pmt(&buffer_size, &ni->tempfd);
         puts("Discarded message: no IP specified");
         return 0;
     }
@@ -316,7 +289,7 @@ int process_message_temp(t_nodeinfo *si)
     char *port_start = strchr(ip_start+1, ' ');
     if (port_start == NULL) {
         // Message is invalid
-        reset_pmt(&buffer_size, &si->tempfd);
+        reset_pmt(&buffer_size, &ni->tempfd);
         puts("Discarded message: no port specified");
         return 0;
     }
@@ -329,7 +302,7 @@ int process_message_temp(t_nodeinfo *si)
     convert_buffer[ip_start-i_start-1] = '\0';
     if (!strisui(convert_buffer)) {
         // Message is invalid
-        reset_pmt(&buffer_size, &si->tempfd);
+        reset_pmt(&buffer_size, &ni->tempfd);
         printf("Discarded message: no node_i is not a number (%s)\n", convert_buffer);
         return 0;
     }
@@ -341,7 +314,7 @@ int process_message_temp(t_nodeinfo *si)
     convert_buffer[port_start-ip_start-1] = '\0';
     if (!isipaddr(convert_buffer)) {
         // Message is invalid
-        reset_pmt(&buffer_size, &si->tempfd);
+        reset_pmt(&buffer_size, &ni->tempfd);
         printf("Discarded message: no node_ip is not an ip (%s)\n", convert_buffer);
         return 0;
     }
@@ -354,50 +327,50 @@ int process_message_temp(t_nodeinfo *si)
     convert_buffer[buffer_size-(int)(port_start-buffer)-2] = '\0';
     if (!strisui(convert_buffer)) {
         // Message is invalid
-        reset_pmt(&buffer_size, &si->tempfd);
+        reset_pmt(&buffer_size, &ni->tempfd);
         printf("Discarded message: no node_port is not a number (%s)\n", convert_buffer);
         return 0;
     }
     // Node port
     int node_port = strtoui(convert_buffer);
 
-    // reset_pmt(&buffer_size, &si->tempfd);
+    // reset_pmt(&buffer_size, &ni->tempfd);
     printf("Received valid message: i=%d IP=%s port=%d\n", node_i, node_ip, node_port);
     buffer_size = 0;
 
-    if (si->nextfd != -1) {
+    if (ni->nextfd != -1) {
         // Message to be sent
         char message[64] = "";
 
         // Let the current successor know it has a new predecessor
         sprintf(message, "PRED %d %s %d\n", node_i, node_ip, node_port);
-        int result = sendall(si->nextfd, message, strlen(message));
+        int result = sendall(ni->nextfd, message, strlen(message));
         if (result < 0) {
             // Successor disconnected
-            close(si->nextfd);
-            si->nextfd = -1;
+            close(ni->nextfd);
+            ni->nextfd = -1;
         }
         else if (result > 0) {
             // An error occurred
-            close(si->nextfd);
-            si->nextfd = -1;
-            reset_pmt(&buffer_size, &si->tempfd);
+            close(ni->nextfd);
+            ni->nextfd = -1;
+            reset_pmt(&buffer_size, &ni->tempfd);
             return -1;
         }
     }
 
     // Set this node's successor to be the current connection
-    si->nextfd = si->tempfd;
-    copy_conn_info(&si->successor, si->temp);
+    ni->nextfd = ni->tempfd;
+    copy_conn_info(&ni->successor, ni->temp);
 
-    if (si->prevfd == -1) {
+    if (ni->prevfd == -1) {
         // This node is the first node in the ring -> close the cycle
-        si->prevfd = si->tempfd;
-        copy_conn_info(&si->predecessor, si->temp);
+        ni->prevfd = ni->tempfd;
+        copy_conn_info(&ni->predecessor, ni->temp);
     }
 
-    reset_conn_buffer(si->temp);   
-    si->tempfd = -1;
+    reset_conn_buffer(ni->temp);   
+    ni->tempfd = -1;
 
     return 0;
 }

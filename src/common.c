@@ -77,15 +77,15 @@ void reset_conn_buffer(t_conn_info* ci)
 
 t_nodeinfo *new_nodeinfo()
 {
-    t_nodeinfo *si = (t_nodeinfo*) malloc(sizeof(t_nodeinfo));
-    si->mainfd = -1;
-    si->prevfd = -1;
-    si->nextfd = -1;
-    si->tempfd = -1;
-    si->predecessor = NULL;
-    si->successor = NULL;
-    si->temp = NULL;
-    return si;
+    t_nodeinfo *ni = (t_nodeinfo*) malloc(sizeof(t_nodeinfo));
+    ni->mainfd = -1;
+    ni->prevfd = -1;
+    ni->nextfd = -1;
+    ni->tempfd = -1;
+    ni->predecessor = NULL;
+    ni->successor = NULL;
+    ni->temp = NULL;
+    return ni;
 }
 
 int maxfd(t_nodeinfo *si)
@@ -96,11 +96,11 @@ int maxfd(t_nodeinfo *si)
     return mx;
 }
 
-void free_nodeinfo(t_nodeinfo *si)
+void free_nodeinfo(t_nodeinfo *ni)
 {
-    free(si->predecessor);
-    free(si->successor);
-    free(si);
+    free(ni->predecessor);
+    free(ni->successor);
+    free(ni);
 }
 
 int sendall(int sd, char *message, size_t size)

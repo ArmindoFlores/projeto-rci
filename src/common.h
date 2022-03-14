@@ -98,17 +98,17 @@ t_nodeinfo *new_nodeinfo();
 /**
  * @brief Returns the largest file descriptor used by the object
  * 
- * @param si the t_nodeinfo object
+ * @param ni the t_nodeinfo object
  * @return int the largest used file descriptor
  */
-int maxfd(t_nodeinfo *si);
+int maxfd(t_nodeinfo *ni);
 
 /**
  * @brief Frees a t_nodeinfo object
  * 
- * @param si the t_nodeinfo object
+ * @param ni the t_nodeinfo object
  */
-void free_nodeinfo(t_nodeinfo *si);
+void free_nodeinfo(t_nodeinfo *ni);
 
 /**
  * @brief Send an entire message through a socket
