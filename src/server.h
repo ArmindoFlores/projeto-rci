@@ -9,6 +9,7 @@ typedef enum event {
     E_MESSAGE_PREDECESSOR,
     E_MESSAGE_SUCCESSOR,
     E_MESSAGE_TEMP,
+    E_MESSAGE_USER,
     E_ERROR
 } t_event;
 

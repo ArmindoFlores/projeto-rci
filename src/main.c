@@ -8,8 +8,20 @@
 
 char* get_event_string(t_event e)
 {
-    static char strings[][32] = {"E_INCOMING_CONNECTION", "E_MESSAGE_PREDECESSOR", "E_MESSAGE_SUCCESSOR", "E_MESSAGE_TEMP", "E_ERROR"};
+    static char strings[][32] = {"E_INCOMING_CONNECTION", "E_MESSAGE_PREDECESSOR", "E_MESSAGE_SUCCESSOR", "E_MESSAGE_TEMP", "E_MESSAGE_USER", "E_ERROR"};
     return strings[e];
+}
+
+void read_from_stdin()
+{
+    char buffer[128] = "";
+    char *result = fgets(buffer, sizeof(buffer), stdin);
+    if (buffer == result) {
+        printf("Received message: %s", buffer);
+    }
+    else {
+        puts("Error calling fgets()");
+    }
 }
 
 int main()
@@ -50,6 +62,10 @@ int main()
             case E_MESSAGE_SUCCESSOR:
                 // This node's successor sent a message
                 result = process_message_successor(si);
+                break;
+
+            case E_MESSAGE_USER:
+                read_from_stdin();
                 break;
 
             // TODO: We're missing E_MESSAGE_PREDECESSOR

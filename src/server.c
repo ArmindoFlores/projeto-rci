@@ -81,10 +81,12 @@ t_event select_event(t_nodeinfo* si)
 
     // Initialize file descriptor set
     fd_set read_fds;
-    FD_ZERO(&read_fds);
+    FD_ZERO(&read_fds); 
     int fdmax = maxfd(si);
+    fdmax = fdmax > STDIN_FILENO ? fdmax : STDIN_FILENO;
 
     // Add currently in-use file descriptors to the set
+    FD_SET(STDIN_FILENO, &read_fds);
     FD_SET(si->mainfd, &read_fds);
     if (si->nextfd > 0)
         FD_SET(si->nextfd, &read_fds);
@@ -94,8 +96,10 @@ t_event select_event(t_nodeinfo* si)
         FD_SET(si->tempfd, &read_fds);
 
     int count = select(fdmax+1, &read_fds, NULL, NULL, NULL);
-    if (count < 0)
+    if (count < 0) {
+        puts("\x1b[31mSelect error!\033[m");
         exit(1);
+    }
     while (count--) {
         // Check for ready fd's with FD_ISSET
         if (FD_ISSET(si->mainfd, &read_fds)) {
@@ -118,7 +122,12 @@ t_event select_event(t_nodeinfo* si)
             FD_CLR(si->tempfd, &read_fds);
             return E_MESSAGE_TEMP;
         }
+        else if (FD_ISSET(STDIN_FILENO, &read_fds)) {
+            FD_CLR(STDIN_FILENO, &read_fds);
+            return E_MESSAGE_USER;
+        }
     }
+
     return E_ERROR;
 }
 
