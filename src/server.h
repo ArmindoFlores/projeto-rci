@@ -6,11 +6,10 @@
 /**
  * @brief Creates a new server listening on the specified port
  * 
- * @param port the port to listen on
  * @param ni necessary information about the node
  * @return [ @b int ] 0 if successfull, -1 otherwise
  */
-int init_server(const char* port, t_nodeinfo *ni);
+int init_server(t_nodeinfo *ni);
 
 /**
  * @brief Closes the server and frees associated memory
@@ -21,21 +20,24 @@ void close_server(t_nodeinfo *ni);
 /**
  * @brief Process an incoming connection
  * 
- * @param ni necessary information about the node * @return [ @b int ] 0 if successfull, -1 otherwise 
+ * @param ni necessary information about the node
+ *  @return [ @b int ] 0 if successfull, -1 otherwise 
  */
 int process_incoming_connection(t_nodeinfo *ni);
 
 /**
  * @brief Process an incoming message from a temporary connection
  * 
- * @param ni necessary information about the node * @return [ @b int ] 0 if successfull, -1 otherwise 
+ * @param ni necessary information about the node 
+ * @return [ @b int ] 0 if successfull, -1 otherwise 
  */
 int process_message_temp(t_nodeinfo *ni);
 
 /**
  * @brief Process an incoming message from this node's successor
  * 
- * @param ni necessary information about the node * @return [ @b int ] 0 if successfull, -1 otherwise 
+ * @param ni necessary information about the node 
+ * @return [ @b int ] 0 if successfull, -1 otherwise 
  */
 int process_message_successor(t_nodeinfo *ni);
 

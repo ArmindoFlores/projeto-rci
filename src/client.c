@@ -6,7 +6,7 @@
 #include <signal.h>
 #include <netdb.h>
 
-int init_client(const char* addr, const char* port)
+int init_client(const char* addr, const char* port, t_nodeinfo *ni)
 {
     // Ignore SIGPIPE
     struct sigaction act;
@@ -32,6 +32,9 @@ int init_client(const char* addr, const char* port)
     if (errcode != 0) 
         return -1;
 
+    ni->prevfd = sockfd;
+    ni->predecessor = new_conn_info(2048, *res->ai_addr, res->ai_addrlen);
+
     freeaddrinfo(res);
-    return sockfd;
+    return 0;
 }

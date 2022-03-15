@@ -10,7 +10,7 @@
 #include <netdb.h>
 #include <string.h>
 
-int init_server(const char* port, t_nodeinfo *ni)
+int init_server(t_nodeinfo *ni)
 {
     // Try to create a socket for TCP connections
     int mainfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -26,7 +26,7 @@ int init_server(const char* port, t_nodeinfo *ni)
     hints.ai_flags = AI_PASSIVE;
 
     // Get address info
-    if (getaddrinfo(NULL, port, &hints, &res) != 0) {
+    if (getaddrinfo(NULL, ni->tcpserverport, &hints, &res) != 0) {
         return -1;
     }
 

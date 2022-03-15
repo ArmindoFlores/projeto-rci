@@ -36,24 +36,25 @@ t_event select_event(t_nodeinfo* ni)
         puts("\x1b[31mSelect error!\033[m");
         exit(1);
     }
+
     while (count--) {
         // Check for ready fd's with FD_ISSET
-        if (FD_ISSET(ni->mainfd, &read_fds)) {
+        if (ni->mainfd != -1 && FD_ISSET(ni->mainfd, &read_fds)) {
             // Incoming connection
             FD_CLR(ni->mainfd, &read_fds);
             return E_INCOMING_CONNECTION;
         }
-        else if (FD_ISSET(ni->nextfd, &read_fds)) {
+        else if (ni->nextfd != -1 && FD_ISSET(ni->nextfd, &read_fds)) {
             // Incoming message from successor
             FD_CLR(ni->nextfd, &read_fds);
             return E_MESSAGE_SUCCESSOR;
         }
-        else if (FD_ISSET(ni->prevfd, &read_fds)) {
+        else if (ni->prevfd != -1 && FD_ISSET(ni->prevfd, &read_fds)) {
             // Incoming message from predecessor
             FD_CLR(ni->prevfd, &read_fds);
             return E_MESSAGE_PREDECESSOR;
         }
-        else if (FD_ISSET(ni->tempfd, &read_fds)) {
+        else if (ni->tempfd != -1 && FD_ISSET(ni->tempfd, &read_fds)) {
             // Incoming message from somewhere else
             FD_CLR(ni->tempfd, &read_fds);
             return E_MESSAGE_TEMP;

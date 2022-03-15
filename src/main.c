@@ -14,16 +14,89 @@ char* get_event_string(t_event e)
     return strings[e];
 }
 
-void read_from_stdin()
+int process_command_new(t_nodeinfo *ni) {
+    int result = init_server(ni);
+    if (result != 0) {
+        puts("Error creating node");
+        return -1;
+    }
+    return 0;
+}
+
+int process_command_pentry(int pred, int port, char *ipaddr, t_nodeinfo *ni)
+{
+    if (pred > 31 || pred < 0) {
+        printf("Invalid predecessor '%d'\n", pred);
+        return 0;
+    }
+    if (!isipaddr(ipaddr)) {
+        printf("Invalid IP address '%s'\n", ipaddr);
+        return 0;
+    }
+    if (port > 65535 || port < 0) {
+        printf("Invalid port number '%d'\n", port);
+        return 0;
+    }
+
+    int result = init_server(ni);
+    if (result != 0) {
+        puts("Error creating node");
+        return -1;
+    }
+
+    char portstr[6] = "";
+    snprintf(portstr, sizeof(portstr), "%d", port);
+    result = init_client(ipaddr, portstr, ni);
+
+    if (result == -1)
+        return -1;
+
+    char message[64] = "";
+    sprintf(message, "SELF %d %s %s\n", ni->key, ni->ipaddr, ni->tcpserverport);
+    if (sendall(ni->prevfd, message, strlen(message)) != 0) {
+        puts("Error sending message to predecessor");
+        return -1;
+    }
+    
+    return 0;
+}
+
+int read_from_stdin(t_nodeinfo *ni)
 {
     char buffer[128] = "";
     char *result = fgets(buffer, sizeof(buffer), stdin);
-    if (buffer == result) {
-        printf("Received message: %s", buffer);
-    }
-    else {
+    if (buffer != result) {
         puts("Error calling fgets()");
+        return -1;
     }
+    if (strcmp(buffer, "new\n") == 0) {
+        if (ni->mainfd != -1) {
+            // Server is already running
+            puts("Node already in a ring");
+            return 0;
+        }
+        if (process_command_new(ni) != 0)
+            return -1;
+        puts("New!!!");
+        return 0;
+    }
+    if (strncmp(buffer, "pentry", 6) == 0) {
+        if (ni->mainfd != -1) {
+            // Server is already running
+            puts("Node already in a ring");
+            return 0;
+        }
+        int pred, port;
+        char ipaddr[16] = "";
+        if (sscanf(buffer+6, " %u %16s %u\n", &pred, ipaddr, &port) == 3) {
+            ipaddr[15] = '\0';            
+            return process_command_pentry(pred, port, ipaddr, ni);
+        }
+        else {
+            puts("Invalid format. Usage: pentry pred pred.IP pred.port");
+        }
+    }
+    return 0;
 }
 
 void usage(char *name) {
@@ -49,15 +122,14 @@ int main(int argc, char *argv[])
         exit(1);
     }    
 
-    t_nodeinfo *ni = new_nodeinfo(strtoui(argv[1]));
+    t_nodeinfo *ni = new_nodeinfo(strtoui(argv[1]), argv[2], argv[3]);
 
     // Create the server
-    int err = init_server(argv[3], ni);
-    if (err != 0) {
-        printf("Error initializing server!\n");
-        free_nodeinfo(ni);
-        exit(1);
-    }
+    // if (err != 0) {
+    //     printf("Error initializing server!\n");
+    //     free_nodeinfo(ni);
+    //     exit(1);
+    // }
 
     // Main loop
     while (1) {
@@ -87,7 +159,7 @@ int main(int argc, char *argv[])
                 break;
 
             case E_MESSAGE_USER:
-                read_from_stdin();
+                result = read_from_stdin(ni);
                 break;
 
             // TODO: We're missing E_MESSAGE_PREDECESSOR

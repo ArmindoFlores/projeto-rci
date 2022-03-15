@@ -12,6 +12,10 @@ typedef struct conn_info t_conn_info;
 typedef struct nodeinfo {
     // Node key
     unsigned int key;
+    // TCP server's port
+    char tcpserverport[6];
+    // Server IP
+    char ipaddr[16];
     // Server socket file descriptor
     int mainfd;
     // Predecessor's connection's socket file descriptor (-1 if a connection does not exist)
@@ -94,8 +98,10 @@ int has_available_data(t_conn_info *ci);
  * @brief Creates a new t_nodeinfo object
  * 
  * @param id the node's key
+ * @param ipaddr the node's IP address
+ * @param port the tcp server's port
  */
-t_nodeinfo *new_nodeinfo(int id);
+t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port);
 
 /**
  * @brief Returns the largest file descriptor used by the object
