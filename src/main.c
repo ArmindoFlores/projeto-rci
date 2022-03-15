@@ -6,6 +6,7 @@
 #include "utils.h"
 #include "client.h"
 #include "server.h"
+#include "event.h"
 
 char* get_event_string(t_event e)
 {

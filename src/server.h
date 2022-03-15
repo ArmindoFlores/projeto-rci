@@ -3,15 +3,6 @@
 
 #include "common.h"
 
-typedef enum event {
-    E_INCOMING_CONNECTION,
-    E_MESSAGE_PREDECESSOR,
-    E_MESSAGE_SUCCESSOR,
-    E_MESSAGE_TEMP,
-    E_MESSAGE_USER,
-    E_ERROR
-} t_event;
-
 /**
  * @brief Creates a new server listening on the specified port
  * 
@@ -20,13 +11,6 @@ typedef enum event {
  * @return [ @b int ] 0 if successfull, -1 otherwise
  */
 int init_server(const char* port, t_nodeinfo *ni);
-
-/**
- * @brief Blocks until an event occurrs, then returns it
- * 
- * @param ni necessary information about the node * @return [ @b t_event ] what event has occurred
- */
-t_event select_event(t_nodeinfo *ni);
 
 /**
  * @brief Closes the server and frees associated memory
