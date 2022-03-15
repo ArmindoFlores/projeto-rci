@@ -11,7 +11,15 @@
 
 char* get_event_string(t_event e)
 {
-    static char strings[][32] = {"E_INCOMING_CONNECTION", "E_MESSAGE_PREDECESSOR", "E_MESSAGE_SUCCESSOR", "E_MESSAGE_TEMP", "E_MESSAGE_USER", "E_ERROR"};
+    static char strings[][32] = {
+        "E_INCOMING_CONNECTION", 
+        "E_MESSAGE_PREDECESSOR", 
+        "E_MESSAGE_SUCCESSOR", 
+        "E_MESSAGE_TEMP", 
+        "E_MESSAGE_USER", 
+        "E_TIMEOUT", 
+        "E_ERROR"
+    };
     return strings[e];
 }
 
@@ -134,12 +142,14 @@ int main(int argc, char *argv[])
 
     // Main loop
     while (1) {
-        printf("[*] Waiting for events...\n");
+        // printf("[*] Waiting for events...\n");
 
         // This calls select() and may block
         // Returns after an event happens
         t_event e = select_event(ni);
-        printf("[*] Got new event '%s'\n", get_event_string(e));
+
+        if (e != E_TIMEOUT)
+            printf("[*] Got new event '%s'\n", get_event_string(e));
 
         int result = 0;
         // Act based on what event just occurred

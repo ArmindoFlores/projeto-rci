@@ -5,8 +5,11 @@
 #include <unistd.h>
 #include <errno.h>
 
+
 t_event select_event(t_nodeinfo* ni)
 {
+    struct timeval SELECT_TIMEOUT = { .tv_sec = 0, .tv_usec = 100000 };
+
     // If there's pending reads in any of the connections, do them first
     if (ni->nextfd > 0 && has_available_data(ni->successor))
         return E_MESSAGE_SUCCESSOR;
@@ -32,7 +35,7 @@ t_event select_event(t_nodeinfo* ni)
     if (ni->tempfd > 0)
         FD_SET(ni->tempfd, &read_fds);
 
-    int count = select(fdmax+1, &read_fds, NULL, NULL, NULL);
+    int count = select(fdmax+1, &read_fds, NULL, NULL, &SELECT_TIMEOUT);
     if (count < 0) {
         printf("\x1b[31m[!] Select error (%d)!\033[m\n", errno);
         exit(1);
@@ -66,5 +69,5 @@ t_event select_event(t_nodeinfo* ni)
         }
     }
 
-    return E_ERROR;
+    return E_TIMEOUT;
 }
