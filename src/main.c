@@ -158,11 +158,14 @@ int main(int argc, char *argv[])
                 result = process_message_successor(ni);
                 break;
 
+            case E_MESSAGE_PREDECESSOR:
+                // This node's predecessor sent a message
+                result = process_message_predecessor(ni);
+                break;
+
             case E_MESSAGE_USER:
                 result = read_from_stdin(ni);
                 break;
-
-            // TODO: We're missing E_MESSAGE_PREDECESSOR
 
             default:
                 break;

@@ -65,7 +65,7 @@ int process_incoming_connection(t_nodeinfo *ni)
     if (newfd == -1)
         return -1;
 
-    if (ni->tempfd >= 0 || ni->nextfd > 0) {
+    if (ni->tempfd >= 0) {
         // We already have a connection being established, reject this one
         puts("Rejected connection!");
         close(newfd);
@@ -169,6 +169,38 @@ int process_message_successor(t_nodeinfo *ni)
     }
 
     printf("Received from successor: '%s'\n", buffer);
+    return 0;
+}
+
+int process_message_predecessor(t_nodeinfo *ni)
+{
+    //! This function is a work-in-progress
+    // This is the internal buffer that keep track of what has been
+    // sent through ni->prevfd
+    static char buffer[64];
+    // This is the current size of the internal buffer
+    static size_t buffer_size = 0;
+
+    t_read_out ro = process_incoming(&ni->prevfd, buffer, &buffer_size, sizeof(buffer), ni->predecessor);
+    if (ro.read_type == RO_ERROR)
+        return ro.error_code;
+    if (ro.read_type == RO_DISCONNECT) {
+        // !! Predecessor has disconnected!
+        if (ni->nextfd == ni->prevfd) {
+            // This is a two-node network
+            ni->nextfd = -1;
+        }
+        reset_pmt(&buffer_size, &ni->prevfd);
+        return 0;
+    }
+
+    if (buffer[buffer_size-1] != '\n') {
+        // We might not have received the whole message yet
+        puts("Waiting for more bytes...");
+        return 0;
+    }
+
+    printf("Received from predecessor: '%s'\n", buffer);
     return 0;
 }
 
@@ -276,6 +308,7 @@ int process_message_temp(t_nodeinfo *ni)
     buffer_size = 0;
 
     if (ni->nextfd != -1) {
+        puts("This already has a successor");
         // Message to be sent
         char message[64] = "";
 
@@ -294,6 +327,9 @@ int process_message_temp(t_nodeinfo *ni)
             reset_pmt(&buffer_size, &ni->tempfd);
             return -1;
         }
+    }
+    else {
+        puts("This node doesn't already have a successor");
     }
 
     // Set this node's successor to be the current connection
