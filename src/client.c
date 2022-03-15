@@ -33,7 +33,7 @@ int init_client(const char* addr, const char* port, t_nodeinfo *ni)
         return -1;
 
     ni->prevfd = sockfd;
-    ni->predecessor = new_conn_info(2048, *res->ai_addr, res->ai_addrlen);
+    ni->predecessor = new_conn_info(2048);
 
     freeaddrinfo(res);
     return 0;

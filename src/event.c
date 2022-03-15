@@ -33,7 +33,7 @@ t_event select_event(t_nodeinfo* ni)
 
     int count = select(fdmax+1, &read_fds, NULL, NULL, NULL);
     if (count < 0) {
-        puts("\x1b[31mSelect error!\033[m");
+        puts("\x1b[31m[!] Select error!\033[m");
         exit(1);
     }
 

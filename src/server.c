@@ -59,27 +59,30 @@ int process_incoming_connection(t_nodeinfo *ni)
 {
     struct sockaddr addr;
     socklen_t addrlen = sizeof(addr);
+    char ipaddr[INET_ADDRSTRLEN] = "";
 
     // Accept the connection
     int newfd = accept(ni->mainfd, &addr, &addrlen);
     if (newfd == -1)
         return -1;
 
+    ipaddr_from_sockaddr(&addr, ipaddr);    
+
     if (ni->tempfd >= 0) {
         // We already have a connection being established, reject this one
-        puts("Rejected connection!");
+        printf("\x1b[33m[*] Rejected connection from %s\033[m\n", ipaddr);
         close(newfd);
         return 0;
     }
 
-    puts("Accepted connection");
+    printf("\x1b[32m[*] Accepted connection from %s\033[m\n", ipaddr);
 
     // Save connection information in ni->temp and the socket fd in ni->tempfd
     ni->tempfd = newfd;
     if (ni->temp == NULL)
-        ni->temp = new_conn_info(2048, addr, addrlen);
+        ni->temp = new_conn_info(2048);
     else
-        set_conn_info(ni->temp, 2048, addr, addrlen);
+        set_conn_info(ni->temp, 2048);
     return 0;
 }
 
@@ -116,7 +119,7 @@ t_read_out process_incoming(int *sfd, char *buffer, size_t *buffer_size, size_t 
         if (*buffer_size >= max_buffer_size-1 && buffer[max_buffer_size-1] != '\n') {
             // This is already an invalid message (too big)
             reset_pmt(buffer_size, sfd);
-            puts("Message is too big");
+            puts("\x1b[31m[!] Received a message with invalid size\033[m");
             ro.read_type = RO_DISCONNECT;
             return ro;
         }
@@ -128,14 +131,12 @@ t_read_out process_incoming(int *sfd, char *buffer, size_t *buffer_size, size_t 
     }
     else if (ro.read_type == RO_DISCONNECT) {
         // Client closed the connection
-        puts("Client disconnected");
+        puts("[*] Client disconnected");
         return ro;
     }
 
     // Make sure the buffer is a null terminated string
     buffer[*buffer_size] = '\0';
-    
-    printf("Buffer: %s (rb=%ld, bs=%ld)\n", buffer, ro.read_bytes, *buffer_size);
 
     return ro;
 }
@@ -154,6 +155,7 @@ int process_message_successor(t_nodeinfo *ni)
         return ro.error_code;
     if (ro.read_type == RO_DISCONNECT) {
         // !! Successor has disconnected!
+        puts("\x1b[31m[!] Successor has disconnected abruptly (ring may be broken)!\033[m");
         if (ni->nextfd == ni->prevfd) {
             // This is a two-node network
             ni->prevfd = -1;
@@ -164,11 +166,10 @@ int process_message_successor(t_nodeinfo *ni)
 
     if (buffer[buffer_size-1] != '\n') {
         // We might not have received the whole message yet
-        puts("Waiting for more bytes...");
         return 0;
     }
 
-    printf("Received from successor: '%s'\n", buffer);
+    printf("[*] Received from successor: '%s'\n", buffer);
     return 0;
 }
 
@@ -186,6 +187,7 @@ int process_message_predecessor(t_nodeinfo *ni)
         return ro.error_code;
     if (ro.read_type == RO_DISCONNECT) {
         // !! Predecessor has disconnected!
+        puts("\x1b[31m[!] Predecessor has disconnected abruptly (ring may be broken)!\033[m");
         if (ni->nextfd == ni->prevfd) {
             // This is a two-node network
             ni->nextfd = -1;
@@ -196,11 +198,10 @@ int process_message_predecessor(t_nodeinfo *ni)
 
     if (buffer[buffer_size-1] != '\n') {
         // We might not have received the whole message yet
-        puts("Waiting for more bytes...");
         return 0;
     }
 
-    printf("Received from predecessor: '%s'\n", buffer);
+    printf("[*] Received from predecessor: '%s'\n", buffer);
     return 0;
 }
 
@@ -224,7 +225,6 @@ int process_message_temp(t_nodeinfo *ni)
 
     if (buffer[buffer_size-1] != '\n') {
         // We might not have received the whole message yet
-        puts("Waiting for more bytes...");
         return 0;
     }
 
@@ -232,88 +232,26 @@ int process_message_temp(t_nodeinfo *ni)
     if (strncmp(buffer, "SELF ", 5) != 0) {
         // Message is invalid
         reset_pmt(&buffer_size, &ni->tempfd);
-        puts("Discarded message: length, termination or header");
+        puts("\x1b[31m[!] Discarded message: length, termination or header\033[m");
         return 0;
     }
 
-    // Find the node identifier, IP and port  
-    
-    // Pointer to the ' ' character before the node identifier
-    char *i_start = strchr(buffer, ' ');
-    if (i_start == NULL) {
-        // Message is invalid
+    t_msginfo mi = get_message_info(buffer, buffer_size);
+    if (mi.type != MI_SUCCESS) {
+        puts("\x1b[31m[!] Received malformatted message\033[m");
         reset_pmt(&buffer_size, &ni->tempfd);
-        puts("Discarded message: no identifier specified");
-        return 0;
-    }
-    // Pointer to the ' ' character before the node IP
-    char *ip_start = strchr(i_start+1, ' ');
-    if (ip_start == NULL) {
-        // Message is invalid
-        reset_pmt(&buffer_size, &ni->tempfd);
-        puts("Discarded message: no IP specified");
-        return 0;
-    }
-    // Pointer to the ' ' character before the node port
-    char *port_start = strchr(ip_start+1, ' ');
-    if (port_start == NULL) {
-        // Message is invalid
-        reset_pmt(&buffer_size, &ni->tempfd);
-        puts("Discarded message: no port specified");
         return 0;
     }
 
-    // This buffer will be used to convert strings to other data types
-    char convert_buffer[64];
-
-    // Find node_i
-    memcpy(convert_buffer, i_start+1, ip_start-i_start-1);
-    convert_buffer[ip_start-i_start-1] = '\0';
-    if (!strisui(convert_buffer)) {
-        // Message is invalid
-        reset_pmt(&buffer_size, &ni->tempfd);
-        printf("Discarded message: no node_i is not a number (%s)\n", convert_buffer);
-        return 0;
-    }
-    // Node identifier
-    int node_i = strtoui(convert_buffer);
-
-    // Find node_ip
-    memcpy(convert_buffer, ip_start+1, port_start-ip_start-1);
-    convert_buffer[port_start-ip_start-1] = '\0';
-    if (!isipaddr(convert_buffer)) {
-        // Message is invalid
-        reset_pmt(&buffer_size, &ni->tempfd);
-        printf("Discarded message: no node_ip is not an ip (%s)\n", convert_buffer);
-        return 0;
-    }
-    // Node IP address
-    char node_ip[16];
-    strcpy(node_ip, convert_buffer);
-
-    // Find node_port
-    memcpy(convert_buffer, port_start+1, buffer_size-(int)(port_start-buffer)-2);
-    convert_buffer[buffer_size-(int)(port_start-buffer)-2] = '\0';
-    if (!strisui(convert_buffer)) {
-        // Message is invalid
-        reset_pmt(&buffer_size, &ni->tempfd);
-        printf("Discarded message: no node_port is not a number (%s)\n", convert_buffer);
-        return 0;
-    }
-    // Node port
-    int node_port = strtoui(convert_buffer);
-
-    // reset_pmt(&buffer_size, &ni->tempfd);
-    printf("Received valid message: i=%d IP=%s port=%d\n", node_i, node_ip, node_port);
+    printf("\x1b[32m[*] Received SELF message, setting node %d (%s:%d) as successor\033[m\n", mi.node_i, mi.node_ip, mi.node_port);
     buffer_size = 0;
 
     if (ni->nextfd != -1) {
-        puts("This already has a successor");
         // Message to be sent
         char message[64] = "";
 
         // Let the current successor know it has a new predecessor
-        sprintf(message, "PRED %d %s %d\n", node_i, node_ip, node_port);
+        sprintf(message, "PRED %d %s %d\n", mi.node_i, mi.node_ip, mi.node_port);
         int result = sendall(ni->nextfd, message, strlen(message));
         if (result < 0) {
             // Successor disconnected
@@ -327,9 +265,6 @@ int process_message_temp(t_nodeinfo *ni)
             reset_pmt(&buffer_size, &ni->tempfd);
             return -1;
         }
-    }
-    else {
-        puts("This node doesn't already have a successor");
     }
 
     // Set this node's successor to be the current connection

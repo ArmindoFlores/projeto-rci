@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
 
 /**
  * @brief An object that holds information about a network connection
@@ -15,7 +16,7 @@ typedef struct nodeinfo {
     // TCP server's port
     char tcpserverport[6];
     // Server IP
-    char ipaddr[16];
+    char ipaddr[INET_ADDRSTRLEN];
     // Server socket file descriptor
     int mainfd;
     // Predecessor's connection's socket file descriptor (-1 if a connection does not exist)
@@ -48,11 +49,9 @@ typedef struct read_out {
  * @brief Creates a new t_conn_info object
  * 
  * @param block_size how many bytes to read at a time
- * @param addr connection address
- * @param addrlen lenth of @b addr
  * @return [ @b t_conn_info* ] the t_conn_info object 
  */
-t_conn_info *new_conn_info(int block_size, struct sockaddr addr, socklen_t addrlen);
+t_conn_info *new_conn_info(int block_size);
 
 /**
  * @brief Copies src into dest
@@ -81,10 +80,8 @@ void free_conn_info(t_conn_info *ci);
  * 
  * @param ci the t_conn_info object
  * @param block_size how many bytes to read at a time
- * @param addr connection address
- * @param addrlen length of @b addr
  */
-void set_conn_info(t_conn_info *ci, int block_size, struct sockaddr addr, socklen_t addrlen);
+void set_conn_info(t_conn_info *ci, int block_size);
 
 /**
  * @brief Checks whether there's pending data to read

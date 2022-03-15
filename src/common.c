@@ -1,5 +1,4 @@
 #include "common.h"
-#include <sys/socket.h>
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
@@ -9,18 +8,14 @@ struct conn_info {
     char *buffer;
     size_t buffer_size;
     int block_size;
-    struct sockaddr addr;
-    socklen_t addrlen;
 };
 
-t_conn_info *new_conn_info(int block_size, struct sockaddr addr, socklen_t addrlen)
+t_conn_info *new_conn_info(int block_size)
 {
     t_conn_info *result = (t_conn_info*) malloc(sizeof(t_conn_info)); 
     result->buffer = (char*) calloc(block_size, sizeof(char));
     result->buffer_size = 0;
     result->block_size = block_size;
-    result->addr = addr;
-    result->addrlen = addrlen;
     return result;
 }
 
@@ -30,7 +25,7 @@ void free_conn_info(t_conn_info *ci)
     free(ci);
 }
 
-void set_conn_info(t_conn_info *ci, int block_size, struct sockaddr addr, socklen_t addrlen)
+void set_conn_info(t_conn_info *ci, int block_size)
 {
     if (ci->block_size != block_size) {
         free(ci->buffer);
@@ -39,8 +34,6 @@ void set_conn_info(t_conn_info *ci, int block_size, struct sockaddr addr, sockle
 
     ci->buffer_size = 0;
     ci->block_size = block_size;
-    ci->addr = addr;
-    ci->addrlen = addrlen;
 }
 
 int has_available_data(t_conn_info *ci)
@@ -52,7 +45,7 @@ void copy_conn_info(t_conn_info **dest, t_conn_info *src)
 {
     if (*dest == NULL) {
         // If destination is not initialize, do it
-        *dest = new_conn_info(src->block_size, src->addr, src->addrlen);
+        *dest = new_conn_info(src->block_size);
     }
     else {
         if ((*dest)->block_size != src->block_size) {
@@ -61,8 +54,6 @@ void copy_conn_info(t_conn_info **dest, t_conn_info *src)
             (*dest)->buffer = (char*) calloc(src->block_size, sizeof(char));
         }
         (*dest)->block_size = src->block_size;
-        (*dest)->addr = src->addr;
-        (*dest)->addrlen = src->addrlen;
     }
 
     (*dest)->buffer_size = src->buffer_size;
