@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200112L
 #include "server.h"
+#include "client.h"
 #include "utils.h"
 #include <stdlib.h>
 #include <stdio.h>
@@ -201,7 +202,51 @@ int process_message_predecessor(t_nodeinfo *ni)
         return 0;
     }
 
-    printf("[*] Received from predecessor: '%s'\n", buffer);
+    if (strncmp(buffer, "PRED ", 5) != 0) {
+        // Message is invalid
+        reset_pmt(&buffer_size, &ni->tempfd);
+        puts("\x1b[31m[!] Discarded message: length, termination or header\033[m");
+        return 0;
+    }
+
+    t_msginfo mi = get_message_info(buffer, buffer_size);
+    if (mi.type != MI_SUCCESS) {
+        printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor)\033[m", ni->pred_ip, ni->pred_port);
+        reset_pmt(&buffer_size, &ni->tempfd);
+        return 0;
+    }
+
+    printf("\x1b[32m[*] Received PRED message, setting node %d (%s:%d) as predecessor\033[m\n", mi.node_i, mi.node_ip, mi.node_port);
+
+    char portstr[6] = "";
+    snprintf(portstr, sizeof(portstr), "%d", mi.node_port);
+
+    // Open a connection to the new predecessor
+    int result = init_client(mi.node_ip, portstr, ni);
+    if (result != 0) {
+        // An error occurred
+        return -1;
+    }
+
+    // Message to be sent
+    char message[64] = "";
+
+    // Let the new predecessor know it has a new successor
+    sprintf(message, "SELF %d %s %s\n", ni->key, ni->ipaddr, ni->tcpserverport);
+
+    result = sendall(ni->prevfd, message, strlen(message));
+    if (result > 0) {
+        // An error occurred
+        close(ni->prevfd);
+        return -1;
+    }
+    if (result == -1) {
+        // Client disconnected
+        puts("\x1b[31m[!] New predecessor has disconnected abruptly (ring may be broken)!\033[m");
+        close(ni->prevfd);
+        return 0;
+    }
+
     return 0;
 }
 
@@ -269,11 +314,15 @@ int process_message_temp(t_nodeinfo *ni)
 
     // Set this node's successor to be the current connection
     ni->nextfd = ni->tempfd;
+    strcpy(ni->succ_ip, mi.node_ip);
+    ni->succ_port = mi.node_port; 
     copy_conn_info(&ni->successor, ni->temp);
 
     if (ni->prevfd == -1) {
         // This node is the first node in the ring -> close the cycle
         ni->prevfd = ni->tempfd;
+        strcpy(ni->pred_ip, mi.node_ip);
+        ni->pred_port = mi.node_port;
         copy_conn_info(&ni->predecessor, ni->temp);
     }
 

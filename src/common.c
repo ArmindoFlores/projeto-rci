@@ -79,6 +79,10 @@ t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port)
     ni->predecessor = NULL;
     ni->successor = NULL;
     ni->temp = NULL;
+    memset(ni->pred_ip, 0, sizeof(ni->pred_ip));
+    memset(ni->succ_ip, 0, sizeof(ni->succ_ip));
+    ni->pred_port = 0;
+    ni->succ_port = 0;
     return ni;
 }
 
@@ -94,6 +98,7 @@ void free_nodeinfo(t_nodeinfo *ni)
 {
     free(ni->predecessor);
     free(ni->successor);
+    free(ni->temp);
     free(ni);
 }
 

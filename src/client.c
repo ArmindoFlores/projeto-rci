@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200112L
 #include "client.h"
+#include <stdio.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <string.h>
@@ -34,6 +35,8 @@ int init_client(const char* addr, const char* port, t_nodeinfo *ni)
 
     ni->prevfd = sockfd;
     ni->predecessor = new_conn_info(2048);
+    strcpy(ni->pred_ip, addr);
+    sscanf(port, "%d", &ni->pred_port);
 
     freeaddrinfo(res);
     return 0;

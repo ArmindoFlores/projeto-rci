@@ -3,6 +3,7 @@
 #include <sys/types.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <errno.h>
 
 t_event select_event(t_nodeinfo* ni)
 {
@@ -33,7 +34,7 @@ t_event select_event(t_nodeinfo* ni)
 
     int count = select(fdmax+1, &read_fds, NULL, NULL, NULL);
     if (count < 0) {
-        puts("\x1b[31m[!] Select error!\033[m");
+        printf("\x1b[31m[!] Select error (%d)!\033[m\n", errno);
         exit(1);
     }
 

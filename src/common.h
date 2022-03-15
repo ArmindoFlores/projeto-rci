@@ -31,6 +31,14 @@ typedef struct nodeinfo {
     t_conn_info *successor;
     // Temporary connection information (NULL if a connection does not exist)
     t_conn_info *temp;
+    // Predecessor IP address
+    char pred_ip[INET_ADDRSTRLEN];
+    // Successor IP address
+    char succ_ip[INET_ADDRSTRLEN];
+    // Predecessor port
+    unsigned int pred_port;
+    // Successor port
+    unsigned int succ_port;
 } t_nodeinfo;
 
 enum type {
