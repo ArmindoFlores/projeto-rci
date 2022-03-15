@@ -61,7 +61,8 @@ t_event select_event(t_nodeinfo* ni)
 
     // Add currently in-use file descriptors to the set
     FD_SET(STDIN_FILENO, &read_fds);
-    FD_SET(ni->mainfd, &read_fds);
+    if (ni->mainfd > 0)
+        FD_SET(ni->mainfd, &read_fds);
     if (ni->nextfd > 0)
         FD_SET(ni->nextfd, &read_fds);
     if (ni->prevfd > 0)
@@ -101,7 +102,6 @@ t_event select_event(t_nodeinfo* ni)
             return E_MESSAGE_USER;
         }
     }
-    printf("[6] ni->tempfd = %d\n", ni->tempfd);
 
     return E_ERROR;
 }
