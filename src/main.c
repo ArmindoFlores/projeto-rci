@@ -3,6 +3,7 @@
 #include <sys/socket.h>
 #include <stdio.h>
 #include <string.h>
+#include "utils.h"
 #include "client.h"
 #include "server.h"
 
@@ -24,12 +25,33 @@ void read_from_stdin()
     }
 }
 
-int main()
+void usage(char *name) {
+    printf("Usage: ./%s ID IPADDR PORT\n", name);
+}
+
+int main(int argc, char *argv[])
 {
-    t_nodeinfo *ni = new_nodeinfo();
+    if (argc != 4) {
+        usage(argv[0]);
+        exit(1);
+    }
+
+    if (!strisui(argv[1])) {
+        fprintf(stderr, "ID must be a number (was '%s')\n", argv[1]);
+        usage(argv[0]);
+        exit(1);
+    }
+
+    if (!strisui(argv[3])) {
+        fprintf(stderr, "PORT must be a number (was '%s')\n", argv[3]);
+        usage(argv[0]);
+        exit(1);
+    }    
+
+    t_nodeinfo *ni = new_nodeinfo(strtoui(argv[1]));
 
     // Create the server
-    int err = init_server("8008", ni);
+    int err = init_server(argv[3], ni);
     if (err != 0) {
         printf("Error initializing server!\n");
         free_nodeinfo(ni);

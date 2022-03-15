@@ -75,9 +75,10 @@ void reset_conn_buffer(t_conn_info* ci)
     ci->buffer_size = 0;
 }
 
-t_nodeinfo *new_nodeinfo()
+t_nodeinfo *new_nodeinfo(int id)
 {
     t_nodeinfo *ni = (t_nodeinfo*) malloc(sizeof(t_nodeinfo));
+    ni->key = id;
     ni->mainfd = -1;
     ni->prevfd = -1;
     ni->nextfd = -1;

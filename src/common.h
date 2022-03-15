@@ -92,8 +92,10 @@ int has_available_data(t_conn_info *ci);
 
 /**
  * @brief Creates a new t_nodeinfo object
+ * 
+ * @param id the node's key
  */
-t_nodeinfo *new_nodeinfo();
+t_nodeinfo *new_nodeinfo(int id);
 
 /**
  * @brief Returns the largest file descriptor used by the object
