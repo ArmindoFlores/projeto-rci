@@ -93,7 +93,7 @@ int process_command_show(t_nodeinfo *ni)
     return 0;
 }
 
-int read_from_stdin(t_nodeinfo *ni)
+int process_user_message(t_nodeinfo *ni)
 {
     char buffer[128] = "";
     char *result = fgets(buffer, sizeof(buffer), stdin);
@@ -201,7 +201,7 @@ int main(int argc, char *argv[])
                 break;
 
             case E_MESSAGE_USER:
-                result = read_from_stdin(ni);
+                result = process_user_message(ni);
                 break;
 
             default:
