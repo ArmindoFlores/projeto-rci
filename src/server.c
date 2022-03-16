@@ -14,11 +14,11 @@
 int init_server(t_nodeinfo *ni)
 {
     // Try to create a socket for TCP connections
-    int mainfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (mainfd == -1) {
+    int main_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (main_fd == -1) {
         return -1;
     }
-    ni->mainfd = mainfd;
+    ni->main_fd = main_fd;
 
     struct addrinfo hints, *res;
     memset(&hints, 0, sizeof(hints));
@@ -27,17 +27,17 @@ int init_server(t_nodeinfo *ni)
     hints.ai_flags = AI_PASSIVE;
 
     // Get address info
-    if (getaddrinfo(NULL, ni->tcpserverport, &hints, &res) != 0) {
+    if (getaddrinfo(NULL, ni->self_port, &hints, &res) != 0) {
         return -1;
     }
 
     // Bind this address
-    if (bind(mainfd, res->ai_addr, res->ai_addrlen) == -1) {
+    if (bind(main_fd, res->ai_addr, res->ai_addrlen) == -1) {
         return -1;
     }
 
     // Start listening for connections
-    if (listen(mainfd, 5) == -1) {
+    if (listen(main_fd, 5) == -1) {
         return -1;
     }
 
@@ -46,14 +46,14 @@ int init_server(t_nodeinfo *ni)
 
 void close_server(t_nodeinfo *ni)
 {
-    if (ni->mainfd >= 0)
-        close(ni->mainfd);
-    if (ni->prevfd >= 0)
-        close(ni->prevfd);
-    if (ni->nextfd >= 0)
-        close(ni->nextfd);
-    if (ni->tempfd >= 0)
-        close(ni->tempfd);
+    if (ni->main_fd >= 0)
+        close(ni->main_fd);
+    if (ni->pred_fd >= 0)
+        close(ni->pred_fd);
+    if (ni->succ_fd >= 0)
+        close(ni->succ_fd);
+    if (ni->temp_fd >= 0)
+        close(ni->temp_fd);
 }
 
 int process_incoming_connection(t_nodeinfo *ni)
@@ -63,13 +63,13 @@ int process_incoming_connection(t_nodeinfo *ni)
     char ipaddr[INET_ADDRSTRLEN] = "";
 
     // Accept the connection
-    int newfd = accept(ni->mainfd, &addr, &addrlen);
+    int newfd = accept(ni->main_fd, &addr, &addrlen);
     if (newfd == -1)
         return -1;
 
     ipaddr_from_sockaddr(&addr, ipaddr);    
 
-    if (ni->tempfd >= 0) {
+    if (ni->temp_fd >= 0) {
         // We already have a connection being established, reject this one
         printf("\x1b[33m[!] Rejected connection from %s\033[m\n", ipaddr);
         close(newfd);
@@ -78,8 +78,8 @@ int process_incoming_connection(t_nodeinfo *ni)
 
     printf("\x1b[32m[*] Accepted connection from %s\033[m\n", ipaddr);
 
-    // Save connection information in ni->temp and the socket fd in ni->tempfd
-    ni->tempfd = newfd;
+    // Save connection information in ni->temp and the socket fd in ni->temp_fd
+    ni->temp_fd = newfd;
     if (ni->temp == NULL)
         ni->temp = new_conn_info(2048);
     else
@@ -146,22 +146,22 @@ int process_message_successor(t_nodeinfo *ni)
 {
     //! This function is a work-in-progress
     // This is the internal buffer that keep track of what has been
-    // sent through ni->nextfd
+    // sent through ni->succ_fd
     static char buffer[64];
     // This is the current size of the internal buffer
     static size_t buffer_size = 0;
 
-    t_read_out ro = process_incoming(&ni->nextfd, buffer, &buffer_size, sizeof(buffer), ni->successor);
+    t_read_out ro = process_incoming(&ni->succ_fd, buffer, &buffer_size, sizeof(buffer), ni->successor);
     if (ro.read_type == RO_ERROR)
         return ro.error_code;
     if (ro.read_type == RO_DISCONNECT) {
         // !! Successor has disconnected!
         puts("\x1b[31m[!] Successor has disconnected abruptly (ring may be broken)!\033[m");
-        if (ni->nextfd == ni->prevfd) {
+        if (ni->succ_fd == ni->pred_fd) {
             // This is a two-node network
-            ni->prevfd = -1;
+            ni->pred_fd = -1;
         }
-        reset_pmt(&buffer_size, &ni->nextfd);
+        reset_pmt(&buffer_size, &ni->succ_fd);
         return 0;
     }
 
@@ -178,22 +178,22 @@ int process_message_predecessor(t_nodeinfo *ni)
 {
     //! This function is a work-in-progress
     // This is the internal buffer that keep track of what has been
-    // sent through ni->prevfd
+    // sent through ni->pred_fd
     static char buffer[64];
     // This is the current size of the internal buffer
     static size_t buffer_size = 0;
 
-    t_read_out ro = process_incoming(&ni->prevfd, buffer, &buffer_size, sizeof(buffer), ni->predecessor);
+    t_read_out ro = process_incoming(&ni->pred_fd, buffer, &buffer_size, sizeof(buffer), ni->predecessor);
     if (ro.read_type == RO_ERROR)
         return ro.error_code;
     if (ro.read_type == RO_DISCONNECT) {
         // !! Predecessor has disconnected!
         puts("\x1b[31m[!] Predecessor has disconnected abruptly (ring may be broken)!\033[m");
-        if (ni->nextfd == ni->prevfd) {
+        if (ni->succ_fd == ni->pred_fd) {
             // This is a two-node network
-            ni->nextfd = -1;
+            ni->succ_fd = -1;
         }
-        reset_pmt(&buffer_size, &ni->prevfd);
+        reset_pmt(&buffer_size, &ni->pred_fd);
         return 0;
     }
 
@@ -204,7 +204,7 @@ int process_message_predecessor(t_nodeinfo *ni)
 
     if (strncmp(buffer, "PRED ", 5) != 0) {
         // Message is invalid
-        reset_pmt(&buffer_size, &ni->tempfd);
+        reset_pmt(&buffer_size, &ni->temp_fd);
         puts("\x1b[31m[!] Discarded message: length, termination or header\033[m");
         return 0;
     }
@@ -212,7 +212,7 @@ int process_message_predecessor(t_nodeinfo *ni)
     t_msginfo mi = get_message_info(buffer, buffer_size);
     if (mi.type != MI_SUCCESS) {
         printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor)\033[m\n", ni->pred_ip, ni->pred_port);
-        reset_pmt(&buffer_size, &ni->tempfd);
+        reset_pmt(&buffer_size, &ni->temp_fd);
         return 0;
     }
 
@@ -228,22 +228,24 @@ int process_message_predecessor(t_nodeinfo *ni)
         return -1;
     }
 
+    ni->pred_id = mi.node_i;
+
     // Message to be sent
     char message[64] = "";
 
     // Let the new predecessor know it has a new successor
-    sprintf(message, "SELF %d %s %s\n", ni->key, ni->ipaddr, ni->tcpserverport);
+    sprintf(message, "SELF %d %s %s\n", ni->key, ni->ipaddr, ni->self_port);
 
-    result = sendall(ni->prevfd, message, strlen(message));
+    result = sendall(ni->pred_fd, message, strlen(message));
     if (result > 0) {
         // An error occurred
-        close(ni->prevfd);
+        close(ni->pred_fd);
         return -1;
     }
     if (result == -1) {
         // Client disconnected
         puts("\x1b[31m[!] New predecessor has disconnected abruptly (ring may be broken)!\033[m");
-        close(ni->prevfd);
+        close(ni->pred_fd);
         return 0;
     }
 
@@ -253,18 +255,18 @@ int process_message_predecessor(t_nodeinfo *ni)
 int process_message_temp(t_nodeinfo *ni)
 {
     // This is the internal buffer that keep track of what has been
-    // sent through ni->tempfd
+    // sent through ni->temp_fd
     static char buffer[64];
 
     // This is the current size of the internal buffer
     static size_t buffer_size = 0;
 
     // Receive message and update buffer
-    t_read_out ro = process_incoming(&ni->tempfd, buffer, &buffer_size, sizeof(buffer), ni->temp);
+    t_read_out ro = process_incoming(&ni->temp_fd, buffer, &buffer_size, sizeof(buffer), ni->temp);
     if (ro.read_type == RO_ERROR)
         return ro.error_code;
     if (ro.read_type == RO_DISCONNECT) {
-        reset_pmt(&buffer_size, &ni->tempfd);
+        reset_pmt(&buffer_size, &ni->temp_fd);
         return 0;
     }
 
@@ -276,7 +278,7 @@ int process_message_temp(t_nodeinfo *ni)
     // Message should be of the format <SELF i i.IP i.port\n>
     if (strncmp(buffer, "SELF ", 5) != 0) {
         // Message is invalid
-        reset_pmt(&buffer_size, &ni->tempfd);
+        reset_pmt(&buffer_size, &ni->temp_fd);
         puts("\x1b[31m[!] Discarded message: length, termination or header\033[m");
         return 0;
     }
@@ -284,7 +286,7 @@ int process_message_temp(t_nodeinfo *ni)
     t_msginfo mi = get_message_info(buffer, buffer_size);
     if (mi.type != MI_SUCCESS) {
         puts("\x1b[31m[!] Received malformatted message\033[m");
-        reset_pmt(&buffer_size, &ni->tempfd);
+        reset_pmt(&buffer_size, &ni->temp_fd);
         return 0;
     }
 
@@ -293,25 +295,25 @@ int process_message_temp(t_nodeinfo *ni)
 
     // Message to be sent
     char message[64] = "";
-    if (ni->nextfd != -1) {
+    if (ni->succ_fd != -1) {
         // There are already more than two nodes in this ring
         // Let the current successor know it has a new predecessor
         sprintf(message, "PRED %d %s %d\n", mi.node_i, mi.node_ip, mi.node_port);
-        int result = sendall(ni->nextfd, message, strlen(message));
+        int result = sendall(ni->succ_fd, message, strlen(message));
         if (result < 0) {
             // Successor disconnected
-            close(ni->nextfd);
-            ni->nextfd = -1;
+            close(ni->succ_fd);
+            ni->succ_fd = -1;
         }
         else if (result > 0) {
             // An error occurred
-            close(ni->nextfd);
-            ni->nextfd = -1;
-            reset_pmt(&buffer_size, &ni->tempfd);
+            close(ni->succ_fd);
+            ni->succ_fd = -1;
+            reset_pmt(&buffer_size, &ni->temp_fd);
             return -1;
         }
     }
-    else if (ni->prevfd == -1) {
+    else if (ni->pred_fd == -1) {
         // These are the first two nodes in the ring, and they're still not connected
         // Let the new node know its predecessor will also be its successor
         int result;
@@ -325,38 +327,41 @@ int process_message_temp(t_nodeinfo *ni)
             // Error: couldn't establish connection
             // This is still recoverable as there is only one node in the ring
             printf("\x1b[33m[!] Couldn't establish connection to new predecessor\033[m\n");
-            reset_pmt(&buffer_size, &ni->tempfd);
+            reset_pmt(&buffer_size, &ni->temp_fd);
             return 0;
         }
 
-        sprintf(message, "SELF %d %s %s\n", ni->key, ni->ipaddr, ni->tcpserverport);
-        result = sendall(ni->prevfd, message, strlen(message));
+        ni->pred_id = mi.node_i;
+
+        sprintf(message, "SELF %d %s %s\n", ni->key, ni->ipaddr, ni->self_port);
+        result = sendall(ni->pred_fd, message, strlen(message));
         if (result < 0) {
             // Temporary connection is over
             // This isn't a problem and won't break any rings
             printf("\x1b[33[!] Client (%s:%d) disconnected before joining the ring\033[m\n", mi.node_ip, mi.node_port);
-            close(ni->prevfd);
-            ni->prevfd = -1;
-            reset_pmt(&buffer_size, &ni->tempfd);
+            close(ni->pred_fd);
+            ni->pred_fd = -1;
+            reset_pmt(&buffer_size, &ni->temp_fd);
             return 0;
         }
         else if (result > 0) {
             // An error occurred
-            close(ni->prevfd);
-            ni->prevfd = -1;
-            reset_pmt(&buffer_size, &ni->tempfd);
+            close(ni->pred_fd);
+            ni->pred_fd = -1;
+            reset_pmt(&buffer_size, &ni->temp_fd);
             return -1;
         }
     }
 
     // Set this node's successor to be the current connection
-    ni->nextfd = ni->tempfd;
+    ni->succ_fd = ni->temp_fd;
+    ni->succ_id = mi.node_i;
     strcpy(ni->succ_ip, mi.node_ip);
     ni->succ_port = mi.node_port; 
     copy_conn_info(&ni->successor, ni->temp);
 
     reset_conn_buffer(ni->temp);   
-    ni->tempfd = -1;
+    ni->temp_fd = -1;
 
     return 0;
 }

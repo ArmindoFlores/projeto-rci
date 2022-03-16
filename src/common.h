@@ -14,17 +14,17 @@ typedef struct nodeinfo {
     // Node key
     unsigned int key;
     // TCP server's port
-    char tcpserverport[6];
+    char self_port[6];
     // Server IP
     char ipaddr[INET_ADDRSTRLEN];
     // Server socket file descriptor
-    int mainfd;
+    int main_fd;
     // Predecessor's connection's socket file descriptor (-1 if a connection does not exist)
-    int prevfd;
+    int pred_fd;
     // Successor's connection's socket file descriptor (-1 if a connection does not exist)
-    int nextfd;
+    int succ_fd;
     // Socket file descriptor of a temporary connection (-1 if a connection does not exist)
-    int tempfd;
+    int temp_fd;
     // Connection information pertaining to this node's predecessor (NULL if a connection does not exist)
     t_conn_info *predecessor;
     // Connection information pertaining to this node's successor (NULL if a connection does not exist)
@@ -39,6 +39,10 @@ typedef struct nodeinfo {
     unsigned int pred_port;
     // Successor port
     unsigned int succ_port;
+    // Predecessor ID
+    unsigned int pred_id;
+    // Successor ID
+    unsigned int succ_id;
 } t_nodeinfo;
 
 enum type {

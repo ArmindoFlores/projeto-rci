@@ -1,7 +1,9 @@
+#define _POSIX_C_SOURCE 200112L
 #include <stdlib.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include "user.h"
@@ -29,7 +31,14 @@ void usage(char *name) {
 }
 
 int main(int argc, char *argv[])
-{
+{    
+    // Ignore SIGPIPE
+    struct sigaction act;
+    memset(&act, 0, sizeof(act));
+    act.sa_handler = SIG_IGN;
+    if (sigaction(SIGPIPE, &act, NULL) == -1)
+        return -1;
+        
     if (argc != 4) {
         usage(argv[0]);
         exit(1);

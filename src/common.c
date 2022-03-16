@@ -70,12 +70,12 @@ t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port)
 {
     t_nodeinfo *ni = (t_nodeinfo*) malloc(sizeof(t_nodeinfo));
     ni->key = id;
-    strncpy(ni->tcpserverport, port, sizeof(ni->tcpserverport)-1);
+    strncpy(ni->self_port, port, sizeof(ni->self_port)-1);
     strncpy(ni->ipaddr, ipaddr, sizeof(ni->ipaddr)-1);
-    ni->mainfd = -1;
-    ni->prevfd = -1;
-    ni->nextfd = -1;
-    ni->tempfd = -1;
+    ni->main_fd = -1;
+    ni->pred_fd = -1;
+    ni->succ_fd = -1;
+    ni->temp_fd = -1;
     ni->predecessor = NULL;
     ni->successor = NULL;
     ni->temp = NULL;
@@ -83,14 +83,16 @@ t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port)
     memset(ni->succ_ip, 0, sizeof(ni->succ_ip));
     ni->pred_port = 0;
     ni->succ_port = 0;
+    ni->pred_id = 0;
+    ni->succ_id = 0;
     return ni;
 }
 
 int maxfd(t_nodeinfo *si)
 {
-    int mx = MAX(si->mainfd, si->prevfd);
-    mx = MAX(mx, si->nextfd);
-    mx = MAX(mx, si->tempfd);
+    int mx = MAX(si->main_fd, si->pred_fd);
+    mx = MAX(mx, si->succ_fd);
+    mx = MAX(mx, si->temp_fd);
     return mx;
 }
 

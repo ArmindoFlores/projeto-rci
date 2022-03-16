@@ -4,18 +4,10 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <string.h>
-#include <signal.h>
 #include <netdb.h>
 
 int init_client(const char* addr, const char* port, t_nodeinfo *ni)
 {
-    // Ignore SIGPIPE
-    struct sigaction act;
-    memset(&act, 0, sizeof(act));
-    act.sa_handler = SIG_IGN;
-    if (sigaction(SIGPIPE, &act, NULL) == -1)
-        return -1;
-
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd == -1) 
         return -1;
@@ -33,7 +25,7 @@ int init_client(const char* addr, const char* port, t_nodeinfo *ni)
     if (errcode != 0) 
         return -1;
 
-    ni->prevfd = sockfd;
+    ni->pred_fd = sockfd;
     ni->predecessor = new_conn_info(2048);
     strcpy(ni->pred_ip, addr);
     sscanf(port, "%d", &ni->pred_port);
