@@ -70,6 +70,29 @@ int process_command_pentry(int pred, int port, char *ipaddr, t_nodeinfo *ni)
     return 0;
 }
 
+int process_command_show(t_nodeinfo *ni)
+{
+    puts("\x1b[34m[*] Node Status\033[m");
+        
+    // Node info
+    printf("This node info:\n* Key: %u\n* IP: %s\n* Port: %s\n", ni->key, ni->ipaddr, ni->tcpserverport);
+
+    // Node successor info
+    if (ni->nextfd == -1)
+        puts("\x1b[31mThis node doesn't have a successor!\033[m");
+    else
+        printf("Successor node info:\n* Key: MISSING\n* IP: %s\n* Port: %u\n", ni->succ_ip, ni->succ_port);
+
+    // Node predecessor info
+    if (ni->prevfd == -1)
+        puts("\x1b[31mThis node doesn't have a predecessor!\033[m");
+    else
+        printf("Predecessor node info:\n* Key: MISSING\n* IP: %s\n* Port: %u\n", ni->pred_ip, ni->pred_port);
+
+    // TODO (iv) Shortcut info
+    return 0;
+}
+
 int read_from_stdin(t_nodeinfo *ni)
 {
     char buffer[128] = "";
@@ -106,24 +129,7 @@ int read_from_stdin(t_nodeinfo *ni)
         }
     }
     if (strcmp(buffer, "show\n") == 0) {
-        puts("\x1b[34m[*] Node Status\033[m");
-
-        // Node info
-        printf("This node info:\n* Key: %u\n* IP: %s\n* Port: %s\n", ni->key, ni->ipaddr, ni->tcpserverport);
-
-        // Node successor info
-        if (ni->nextfd == -1)
-            puts("\x1b[31mThis node doesn't have a successor!\033[m");
-        else
-            printf("Successor node info:\n* Key: MISSING\n* IP: %s\n* Port: %u\n", ni->succ_ip, ni->succ_port);
-
-        // Node predecessor info
-        if (ni->prevfd == -1)
-            puts("\x1b[31mThis node doesn't have a predecessor!\033[m");
-        else
-            printf("Predecessor node info:\n\t* Key: MISSING\n\t* IP: %s\n\t* Port: %u\n", ni->pred_ip, ni->pred_port);
-
-        // TODO (iv) Shortcut info
+        return process_command_show(ni);
     }    
     return 0;
 }
