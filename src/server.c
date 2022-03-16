@@ -71,7 +71,7 @@ int process_incoming_connection(t_nodeinfo *ni)
 
     if (ni->tempfd >= 0) {
         // We already have a connection being established, reject this one
-        printf("\x1b[33m[*] Rejected connection from %s\033[m\n", ipaddr);
+        printf("\x1b[33m[!] Rejected connection from %s\033[m\n", ipaddr);
         close(newfd);
         return 0;
     }
@@ -211,12 +211,12 @@ int process_message_predecessor(t_nodeinfo *ni)
 
     t_msginfo mi = get_message_info(buffer, buffer_size);
     if (mi.type != MI_SUCCESS) {
-        printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor)\033[m", ni->pred_ip, ni->pred_port);
+        printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor)\033[m\n", ni->pred_ip, ni->pred_port);
         reset_pmt(&buffer_size, &ni->tempfd);
         return 0;
     }
 
-    printf("\x1b[32m[*] Received PRED message, setting node %d (%s:%d) as predecessor\033[m\n", mi.node_i, mi.node_ip, mi.node_port);
+    printf("\x1b[32m[*] Received PRED message from %s:%d, setting node %d (%s:%d) as predecessor\033[m\n", ni->pred_ip, ni->pred_port, mi.node_i, mi.node_ip, mi.node_port);
 
     char portstr[6] = "";
     snprintf(portstr, sizeof(portstr), "%d", mi.node_port);
@@ -291,10 +291,10 @@ int process_message_temp(t_nodeinfo *ni)
     printf("\x1b[32m[*] Received SELF message, setting node %d (%s:%d) as successor\033[m\n", mi.node_i, mi.node_ip, mi.node_port);
     buffer_size = 0;
 
+    // Message to be sent
+    char message[64] = "";
     if (ni->nextfd != -1) {
-        // Message to be sent
-        char message[64] = "";
-
+        // There are already more than two nodes in this ring
         // Let the current successor know it has a new predecessor
         sprintf(message, "PRED %d %s %d\n", mi.node_i, mi.node_ip, mi.node_port);
         int result = sendall(ni->nextfd, message, strlen(message));
@@ -311,20 +311,49 @@ int process_message_temp(t_nodeinfo *ni)
             return -1;
         }
     }
+    else if (ni->prevfd == -1) {
+        // These are the first two nodes in the ring, and they're still not connected
+        // Let the new node know its predecessor will also be its successor
+        int result;
+
+        char portstr[6] = "";
+        snprintf(portstr, sizeof(portstr), "%d", mi.node_port);
+
+        // Set the connecting node to also be this node's predecessor
+        result = init_client(mi.node_ip, portstr, ni);
+        if (result != 0) {
+            // Error: couldn't establish connection
+            // This is still recoverable as there is only one node in the ring
+            printf("\x1b[33m[!] Couldn't establish connection to new predecessor\033[m\n");
+            reset_pmt(&buffer_size, &ni->tempfd);
+            return 0;
+        }
+
+        sprintf(message, "SELF %d %s %s\n", ni->key, ni->ipaddr, ni->tcpserverport);
+        result = sendall(ni->prevfd, message, strlen(message));
+        if (result < 0) {
+            // Temporary connection is over
+            // This isn't a problem and won't break any rings
+            printf("\x1b[33[!] Client (%s:%d) disconnected before joining the ring\033[m\n", mi.node_ip, mi.node_port);
+            close(ni->prevfd);
+            ni->prevfd = -1;
+            reset_pmt(&buffer_size, &ni->tempfd);
+            return 0;
+        }
+        else if (result > 0) {
+            // An error occurred
+            close(ni->prevfd);
+            ni->prevfd = -1;
+            reset_pmt(&buffer_size, &ni->tempfd);
+            return -1;
+        }
+    }
 
     // Set this node's successor to be the current connection
     ni->nextfd = ni->tempfd;
     strcpy(ni->succ_ip, mi.node_ip);
     ni->succ_port = mi.node_port; 
     copy_conn_info(&ni->successor, ni->temp);
-
-    if (ni->prevfd == -1) {
-        // This node is the first node in the ring -> close the cycle
-        ni->prevfd = ni->tempfd;
-        strcpy(ni->pred_ip, mi.node_ip);
-        ni->pred_port = mi.node_port;
-        copy_conn_info(&ni->predecessor, ni->temp);
-    }
 
     reset_conn_buffer(ni->temp);   
     ni->tempfd = -1;
