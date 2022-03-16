@@ -81,7 +81,7 @@ int process_command_leave(t_nodeinfo *ni)
 {
     // Node is the only one on the ring
     if (ni->succ_fd == -1)
-        return -1;
+        return 1;
 
     char message[64] = "";
     sprintf(message, "PRED %u %s %u\n", ni->pred_id, ni->pred_ip, ni->pred_port);
@@ -90,7 +90,7 @@ int process_command_leave(t_nodeinfo *ni)
         // Error sending
         return -1;
     }
-    return -1;
+    return 1;
 }
 
 int process_user_message(t_nodeinfo *ni)

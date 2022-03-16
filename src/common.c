@@ -22,8 +22,10 @@ t_conn_info *new_conn_info(int block_size)
 
 void free_conn_info(t_conn_info *ci)
 {
-    free(ci->buffer);
-    free(ci);
+    if (ci) {
+        free(ci->buffer);
+        free(ci);
+    }
 }
 
 void set_conn_info(t_conn_info *ci, int block_size)
@@ -99,10 +101,12 @@ int maxfd(t_nodeinfo *si)
 
 void free_nodeinfo(t_nodeinfo *ni)
 {
-    free_conn_info(ni->predecessor);
-    free_conn_info(ni->successor);
-    free_conn_info(ni->temp);
-    free(ni);
+    if (ni) {
+        free_conn_info(ni->predecessor);
+        free_conn_info(ni->successor);
+        free_conn_info(ni->temp);
+        free(ni);
+    }
 }
 
 int sendall(int sd, char *message, size_t size)

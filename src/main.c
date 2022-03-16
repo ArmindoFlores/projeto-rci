@@ -38,7 +38,7 @@ int main(int argc, char *argv[])
     act.sa_handler = SIG_IGN;
     if (sigaction(SIGPIPE, &act, NULL) == -1)
         return -1;
-        
+
     if (argc != 4) {
         usage(argv[0]);
         exit(1);
@@ -106,10 +106,12 @@ int main(int argc, char *argv[])
             default:
                 break;
         }
-        if (result != 0) {
+        if (result < 0) {
             puts("\x1b[31m[!] An error has occurred!\033[m");
             break;
         }
+        if (result > 0)
+            break;
     }
 
     close_server(ni);
