@@ -33,13 +33,17 @@ int init_server(t_nodeinfo *ni)
 
     // Bind this address
     if (bind(main_fd, res->ai_addr, res->ai_addrlen) == -1) {
+        freeaddrinfo(res);
         return -1;
     }
 
     // Start listening for connections
     if (listen(main_fd, 5) == -1) {
+        freeaddrinfo(res);
         return -1;
     }
+
+    freeaddrinfo(res);
 
     return 0;
 }
@@ -95,7 +99,8 @@ int process_incoming_connection(t_nodeinfo *ni)
  */
 void reset_pmt(size_t *buffer_size, int *fd)
 {
-    close(*fd);
+    if (*fd >= 0)
+        close(*fd);
     *fd = -1;
     *buffer_size = 0;
 }
@@ -211,7 +216,7 @@ int process_message_predecessor(t_nodeinfo *ni)
 
     t_msginfo mi = get_message_info(buffer, buffer_size);
     if (mi.type != MI_SUCCESS) {
-        printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor)\033[m\n", ni->pred_ip, ni->pred_port);
+        printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor): '%s'\033[m\n", ni->pred_ip, ni->pred_port, buffer);
         reset_pmt(&buffer_size, &ni->temp_fd);
         return 0;
     }
@@ -228,6 +233,7 @@ int process_message_predecessor(t_nodeinfo *ni)
         return -1;
     }
 
+    buffer_size = 0;
     ni->pred_id = mi.node_i;
 
     // Message to be sent
@@ -239,13 +245,15 @@ int process_message_predecessor(t_nodeinfo *ni)
     result = sendall(ni->pred_fd, message, strlen(message));
     if (result > 0) {
         // An error occurred
-        close(ni->pred_fd);
+        if (ni->pred_fd >= 0)
+            close(ni->pred_fd);
         return -1;
     }
     if (result == -1) {
         // Client disconnected
         puts("\x1b[31m[!] New predecessor has disconnected abruptly (ring may be broken)!\033[m");
-        close(ni->pred_fd);
+        if (ni->pred_fd >= 0)
+            close(ni->pred_fd);
         return 0;
     }
 
@@ -302,12 +310,14 @@ int process_message_temp(t_nodeinfo *ni)
         int result = sendall(ni->succ_fd, message, strlen(message));
         if (result < 0) {
             // Successor disconnected
-            close(ni->succ_fd);
+            if (ni->succ_fd >= 0)
+                close(ni->succ_fd);
             ni->succ_fd = -1;
         }
         else if (result > 0) {
             // An error occurred
-            close(ni->succ_fd);
+            if (ni->succ_fd >= 0)
+                close(ni->succ_fd);
             ni->succ_fd = -1;
             reset_pmt(&buffer_size, &ni->temp_fd);
             return -1;
@@ -339,14 +349,16 @@ int process_message_temp(t_nodeinfo *ni)
             // Temporary connection is over
             // This isn't a problem and won't break any rings
             printf("\x1b[33[!] Client (%s:%d) disconnected before joining the ring\033[m\n", mi.node_ip, mi.node_port);
-            close(ni->pred_fd);
+            if (ni->pred_fd >= 0)
+                close(ni->pred_fd);
             ni->pred_fd = -1;
             reset_pmt(&buffer_size, &ni->temp_fd);
             return 0;
         }
         else if (result > 0) {
             // An error occurred
-            close(ni->pred_fd);
+            if (ni->pred_fd >= 0)
+                close(ni->pred_fd);
             ni->pred_fd = -1;
             reset_pmt(&buffer_size, &ni->temp_fd);
             return -1;

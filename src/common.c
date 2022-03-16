@@ -1,6 +1,7 @@
 #include "common.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdio.h>
 #include <errno.h>
 #define MAX(x, y) (x > y ? x : y)
 
@@ -98,14 +99,19 @@ int maxfd(t_nodeinfo *si)
 
 void free_nodeinfo(t_nodeinfo *ni)
 {
-    free(ni->predecessor);
-    free(ni->successor);
-    free(ni->temp);
+    free_conn_info(ni->predecessor);
+    free_conn_info(ni->successor);
+    free_conn_info(ni->temp);
     free(ni);
 }
 
 int sendall(int sd, char *message, size_t size)
 {
+    char *buf = (char*) malloc(size + 1);
+    memcpy(buf, message, size);
+    buf[size] = '\0';
+    printf("\x1b[34m[+] %s\033[m\n", buf);
+    free(buf);
     size_t sent_bytes = 0;
     while (sent_bytes < size) {
         int sent = send(sd, message+sent_bytes, size-sent_bytes, 0);

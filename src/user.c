@@ -77,6 +77,22 @@ int process_command_show(t_nodeinfo *ni)
     return 0;
 }
 
+int process_command_leave(t_nodeinfo *ni)
+{
+    // Node is the only one on the ring
+    if (ni->succ_fd == -1)
+        return -1;
+
+    char message[64] = "";
+    sprintf(message, "PRED %u %s %u\n", ni->pred_id, ni->pred_ip, ni->pred_port);
+    int result = sendall(ni->succ_fd, message, strlen(message));
+    if (result != 0) {
+        // Error sending
+        return -1;
+    }
+    return -1;
+}
+
 int process_user_message(t_nodeinfo *ni)
 {
     char buffer[128] = "";
@@ -114,6 +130,12 @@ int process_user_message(t_nodeinfo *ni)
     }
     if (strcmp(buffer, "show\n") == 0) {
         return process_command_show(ni);
+    }    
+    if (strcmp(buffer, "leave\n") == 0) {
+        if (ni->main_fd == -1) {
+            puts("Node is not a member of any ring");
+        }
+        return process_command_leave(ni);
     }    
     return 0;
 }
