@@ -81,13 +81,13 @@ int process_command_show(t_nodeinfo *ni)
     if (ni->nextfd == -1)
         puts("\x1b[31mThis node doesn't have a successor!\033[m");
     else
-        printf("Successor node info:\n* Key: MISSING\n* IP: %s\n* Port: %u\n", ni->succ_ip, ni->succ_port);
+        printf("Successor node info (%d):\n* Key: MISSING\n* IP: %s\n* Port: %u\n",ni->nextfd, ni->succ_ip, ni->succ_port);
 
     // Node predecessor info
     if (ni->prevfd == -1)
         puts("\x1b[31mThis node doesn't have a predecessor!\033[m");
     else
-        printf("Predecessor node info:\n* Key: MISSING\n* IP: %s\n* Port: %u\n", ni->pred_ip, ni->pred_port);
+        printf("Predecessor node info (%d):\n* Key: MISSING\n* IP: %s\n* Port: %u\n", ni->prevfd, ni->pred_ip, ni->pred_port);
 
     // TODO (iv) Shortcut info
     return 0;
