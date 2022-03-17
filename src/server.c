@@ -207,53 +207,57 @@ int process_message_predecessor(t_nodeinfo *ni)
         return 0;
     }
 
-    if (strncmp(buffer, "PRED ", 5) != 0) {
+    if (strncmp(buffer, "PRED ", 5) == 0) {
+        t_msginfo mi = get_message_info(buffer, buffer_size);
+        if (mi.type != MI_SUCCESS) {
+            printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor): '%s'\033[m\n", ni->pred_ip, ni->pred_port, buffer);
+            reset_pmt(&buffer_size, &ni->temp_fd);
+            return 0;
+        }
+
+        printf("\x1b[32m[*] Received PRED message from %s:%d, setting node %d (%s:%d) as predecessor\033[m\n", ni->pred_ip, ni->pred_port, mi.node_i, mi.node_ip, mi.node_port);
+
+        char portstr[6] = "";
+        snprintf(portstr, sizeof(portstr), "%d", mi.node_port);
+
+        // Open a connection to the new predecessor
+        int result = init_client(mi.node_ip, portstr, ni);
+        if (result != 0) {
+            // An error occurred
+            return -1;
+        }
+
+        buffer_size = 0;
+        ni->pred_id = mi.node_i;
+
+        // Message to be sent
+        char message[64] = "";
+
+        // Let the new predecessor know it has a new successor
+        sprintf(message, "SELF %d %s %s\n", ni->key, ni->ipaddr, ni->self_port);
+
+        result = sendall(ni->pred_fd, message, strlen(message));
+        if (result > 0) {
+            // An error occurred
+            if (ni->pred_fd >= 0)
+                close(ni->pred_fd);
+            return -1;
+        }
+        if (result == -1) {
+            // Client disconnected
+            puts("\x1b[31m[!] New predecessor has disconnected abruptly (ring may be broken)!\033[m");
+            if (ni->pred_fd >= 0)
+                close(ni->pred_fd);
+            return 0;
+        }
+    }
+    else if (strncmp(buffer, "FND ", 4) == 0) {
+        puts("\x1b[31m[!] Got \"find\" message (I don't know what to do)!\033[m");
+    }
+    else {
         // Message is invalid
         reset_pmt(&buffer_size, &ni->temp_fd);
         puts("\x1b[31m[!] Discarded message: length, termination or header\033[m");
-        return 0;
-    }
-
-    t_msginfo mi = get_message_info(buffer, buffer_size);
-    if (mi.type != MI_SUCCESS) {
-        printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor): '%s'\033[m\n", ni->pred_ip, ni->pred_port, buffer);
-        reset_pmt(&buffer_size, &ni->temp_fd);
-        return 0;
-    }
-
-    printf("\x1b[32m[*] Received PRED message from %s:%d, setting node %d (%s:%d) as predecessor\033[m\n", ni->pred_ip, ni->pred_port, mi.node_i, mi.node_ip, mi.node_port);
-
-    char portstr[6] = "";
-    snprintf(portstr, sizeof(portstr), "%d", mi.node_port);
-
-    // Open a connection to the new predecessor
-    int result = init_client(mi.node_ip, portstr, ni);
-    if (result != 0) {
-        // An error occurred
-        return -1;
-    }
-
-    buffer_size = 0;
-    ni->pred_id = mi.node_i;
-
-    // Message to be sent
-    char message[64] = "";
-
-    // Let the new predecessor know it has a new successor
-    sprintf(message, "SELF %d %s %s\n", ni->key, ni->ipaddr, ni->self_port);
-
-    result = sendall(ni->pred_fd, message, strlen(message));
-    if (result > 0) {
-        // An error occurred
-        if (ni->pred_fd >= 0)
-            close(ni->pred_fd);
-        return -1;
-    }
-    if (result == -1) {
-        // Client disconnected
-        puts("\x1b[31m[!] New predecessor has disconnected abruptly (ring may be broken)!\033[m");
-        if (ni->pred_fd >= 0)
-            close(ni->pred_fd);
         return 0;
     }
 

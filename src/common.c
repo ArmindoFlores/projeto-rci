@@ -88,6 +88,7 @@ t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port)
     ni->succ_port = 0;
     ni->pred_id = 0;
     ni->succ_id = 0;
+    ni->n = 0;
     return ni;
 }
 

@@ -43,6 +43,8 @@ typedef struct nodeinfo {
     unsigned int pred_id;
     // Successor ID
     unsigned int succ_id;
+    // Search sequence number
+    unsigned int n;
 } t_nodeinfo;
 
 enum type {

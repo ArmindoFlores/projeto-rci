@@ -136,6 +136,19 @@ int process_user_message(t_nodeinfo *ni)
             puts("Node is not a member of any ring");
         }
         return process_command_leave(ni);
-    }    
+    }
+    if (strncmp(buffer, "find ", 5) == 0) {
+        unsigned int key;
+        if (sscanf(buffer+5, "%u", &key) != 1) {
+            puts("Invalid format. Usage: find k");
+            return 0;
+        }
+        char message[64] = "";
+        sprintf(message, "FND %u %u %u %s %s\n", key, ni->n, ni->key, ni->ipaddr, ni->self_port);
+        if (sendall(ni->succ_fd, message, strlen(message)) != 0) {
+            puts("\x1b[31m[!] Error sending \"find\" message to successor\033[m");
+        return -1;
+        }
+    }
     return 0;
 }
