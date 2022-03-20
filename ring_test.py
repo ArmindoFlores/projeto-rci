@@ -69,6 +69,7 @@ def create_process(executable, key, ip, port):
 
 def create_tcp_server_socket(ip, port):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind((ip, port))
     server_socket.listen()
     return server_socket
