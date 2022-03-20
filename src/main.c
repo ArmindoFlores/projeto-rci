@@ -67,6 +67,7 @@ int main(int argc, char *argv[])
 
     // Main loop
     while (1) {
+        fflush(stdout);
         // printf("[*] Waiting for events...\n");
 
         // This calls select() and may block
