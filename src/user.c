@@ -3,6 +3,7 @@
 #include "client.h"
 #include "utils.h"
 #include <stdio.h>
+#include <unistd.h>
 #include <string.h>
 
 int process_command_new(t_nodeinfo *ni) {
@@ -82,6 +83,9 @@ int process_command_leave(t_nodeinfo *ni)
     // Node is the only one on the ring
     if (ni->succ_fd == -1)
         return 1;
+
+    if (ni->pred_fd != -1)
+        close(ni->pred_fd);
 
     char message[64] = "";
     sprintf(message, "PRED %u %s %u\n", ni->pred_id, ni->pred_ip, ni->pred_port);
