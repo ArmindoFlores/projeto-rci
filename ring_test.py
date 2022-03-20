@@ -166,6 +166,7 @@ def test_create_ring(executable, starting_port, verbosity=0):
     ready = select.select([server_socket], [], [], 1)
     if not ready[0]:
         terminate_processes([node_process])
+        server_socket.close()
         return TestResult(False, "Sent 'SELF' message, node did not connect back", read_processes([node_process]))
 
     conn_socket, _ = server_socket.accept()
@@ -173,9 +174,11 @@ def test_create_ring(executable, starting_port, verbosity=0):
    
     result = verify_self_message(message, [node_process], test_key, test_ip, test_port)
     if not result.success:
+        server_socket.close()
         return result
 
     terminate_processes([node_process])
+    server_socket.close()
     return TestResult(True)
 
 def test_join_ring(executable, starting_port, verbosity=0):
@@ -196,6 +199,7 @@ def test_join_ring(executable, starting_port, verbosity=0):
     ready = select.select([server_socket], [], [], 1)
     if not ready[0]:
         terminate_processes([node_process])
+        server_socket.close()
         return TestResult(False, "Sent 'pentry' command, node did not connect", read_processes([node_process]))
 
     conn_socket, _ = server_socket.accept()
@@ -203,9 +207,11 @@ def test_join_ring(executable, starting_port, verbosity=0):
 
     result = verify_self_message(message, [node_process], test_key, test_ip, test_port)
     if not result.success:
+        server_socket.close()
         return result
 
     terminate_processes([node_process])
+    server_socket.close()
     return TestResult(True)
 
 def test_three_node_ring(executable, starting_port, verbosity=0):
@@ -230,6 +236,7 @@ def test_three_node_ring(executable, starting_port, verbosity=0):
     ready = select.select([server_socket], [], [], 1)
     if not ready[0]:
         terminate_processes([node1_process, node2_process])
+        server_socket.close()
         return TestResult(False, "Sent 'pentry' command, node did not connect", read_processes([node1_process, node2_process]))
 
     conn1_socket, _ = server_socket.accept()
@@ -238,6 +245,7 @@ def test_three_node_ring(executable, starting_port, verbosity=0):
     result = verify_self_message(message, [node1_process, node2_process], test1_key, test1_ip, test1_port)
 
     if not result.success:
+        server_socket.close()
         return result
 
     client_socket = create_tcp_client_socket(test1_ip, test1_port)
@@ -250,9 +258,11 @@ def test_three_node_ring(executable, starting_port, verbosity=0):
     
     result = verify_pred_message(message, [node1_process, node2_process], test2_key, test2_ip, test2_port)
     if not result.success:
+        server_socket.close()
         return result
 
     terminate_processes([node1_process, node2_process])
+    server_socket.close()
     return TestResult(True)
 
 def test_three_node_ring_enter(executable, starting_port, verbosity=0):
@@ -281,6 +291,7 @@ def test_three_node_ring_enter(executable, starting_port, verbosity=0):
 
     if node1_process.poll() is not None or node2_process.poll() is not None:
         terminate_processes([node1_process, node2_process])
+        server_socket.close()
         return TestResult(False, "One or more nodes exited before finishing test execution", read_processes([node1_process, node2_process]))
 
     server_socket = create_tcp_server_socket(self_ip, self_port)
@@ -291,6 +302,7 @@ def test_three_node_ring_enter(executable, starting_port, verbosity=0):
     ready = select.select([server_socket], [], [], 1)
     if not ready[0]:
         terminate_processes([node1_process, node2_process])
+        server_socket.close()
         return TestResult(False, "Sent connection request, no node connected back", read_processes([node1_process, node2_process]))
 
     conn_socket, _ = server_socket.accept()
@@ -298,9 +310,11 @@ def test_three_node_ring_enter(executable, starting_port, verbosity=0):
 
     result = verify_self_message(message, [node1_process, node2_process], test1_key, test1_ip, test1_port)
     if not result.success:
+        server_socket.close()
         return result
 
     terminate_processes([node1_process, node2_process])
+    server_socket.close()
     return TestResult(True)
 
 def test_slow_messages(executable, starting_port, verbosity=0):
@@ -332,6 +346,7 @@ def test_slow_messages(executable, starting_port, verbosity=0):
     ready = select.select([server_socket], [], [], 1)
     if not ready[0]:
         terminate_processes([node_process])
+        server_socket.close()
         return TestResult(False, "Sent 'SELF' message, node did not connect back", read_processes([node_process]))
 
     conn_socket, _ = server_socket.accept()
@@ -339,9 +354,11 @@ def test_slow_messages(executable, starting_port, verbosity=0):
     
     result = verify_self_message(message, [node_process], test_key, test_ip, test_port)
     if not result.success:
+        server_socket.close()
         return result
 
     terminate_processes([node_process])
+    server_socket.close()
     return TestResult(True)
 
 def test_invalid_message(executable, starting_port, verbosity=0):
@@ -508,6 +525,7 @@ def test_three_node_ring_leave(executable, starting_port, verbosity=0):
     ready = select.select([server_socket], [], [], 1)
     if not ready[0]:
         terminate_processes([node1_process, node2_process])
+        server_socket.close()
         return TestResult(False, "Sent 'pentry' command, node did not connect", read_processes([node1_process, node2_process]))
 
     conn1_socket, _ = server_socket.accept()
@@ -516,6 +534,7 @@ def test_three_node_ring_leave(executable, starting_port, verbosity=0):
     result = verify_self_message(message, [node1_process, node2_process], test1_key, test1_ip, test1_port)
 
     if not result.success:
+        server_socket.close()
         return result
 
     client_socket = create_tcp_client_socket(test1_ip, test1_port)
@@ -528,6 +547,7 @@ def test_three_node_ring_leave(executable, starting_port, verbosity=0):
     
     result = verify_pred_message(message, [node1_process, node2_process], test2_key, test2_ip, test2_port)
     if not result.success:
+        server_socket.close()
         return result
 
     node1_process.stdin.write("leave\n")
@@ -536,15 +556,18 @@ def test_three_node_ring_leave(executable, starting_port, verbosity=0):
     ready = select.select([server_socket], [], [], 1)
     if not ready[0]:
         terminate_processes([node1_process, node2_process])
+        server_socket.close()
         return TestResult(False, "Sent 'leave' command, remaining node did not connect", read_processes([node1_process, node2_process]))
 
     conn2_socket, _ = server_socket.accept()
     message = recv_message(conn2_socket, 1)
     result = verify_self_message(message, [node1_process, node2_process], test2_key, test2_ip, test2_port)
     if not result.success:
+        server_socket.close()
         return result
 
     terminate_processes([node1_process, node2_process])
+    server_socket.close()
     return TestResult(True)
 
 TESTS = {
