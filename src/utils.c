@@ -110,3 +110,10 @@ void ipaddr_from_sockaddr(struct sockaddr *sa, char *dest)
     struct in_addr addr = ((struct sockaddr_in*)sa)->sin_addr;
     inet_ntop(AF_INET, &addr, dest, INET_ADDRSTRLEN);
 }
+
+unsigned int ring_distance(unsigned int key1, unsigned int key2)
+{
+    // This works because both key1 and key2 are unsigned integers, so 
+    // key2 - key1 wraps around and thus the result is always correct
+    return (key2 - key1) % 32;
+}

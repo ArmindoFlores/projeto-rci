@@ -66,4 +66,12 @@ t_msginfo get_message_info(char *message, size_t message_size);
  */
 void ipaddr_from_sockaddr(struct sockaddr *sa, char *dest);
 
+/**
+ * @brief Calculates the ring distance between key1 and key2
+ * 
+ * @param key1 first key
+ * @param key2 second key
+ */
+unsigned int ring_distance(unsigned int key1, unsigned int key2);
+
 #endif

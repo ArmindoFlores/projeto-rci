@@ -247,16 +247,91 @@ int process_message_predecessor(t_nodeinfo *ni)
             // Client disconnected
             puts("\x1b[31m[!] New predecessor has disconnected abruptly (ring may be broken)!\033[m");
             if (ni->pred_fd >= 0)
-                close(ni->pred_fd);
+                reset_pmt(&buffer_size, &ni->pred_fd);
             return 0;
         }
     }
     else if (strncmp(buffer, "FND ", 4) == 0) {
-        puts("\x1b[31m[!] Got \"find\" message (I don't know what to do)!\033[m");
+        // FIXME: shortcuts aren't working 
+        unsigned int search_key, n, key, port;
+        char ipaddr[INET_ADDRSTRLEN] = "";
+        if (sscanf(buffer+4, "%u %u %u %16s %u\n", &search_key, &n, &key, ipaddr, &port) != 5) {
+            // Invalid format
+            puts("\x1b[31m[!] Discarded message: invalid format\033[m");
+            reset_pmt(&buffer_size, &ni->pred_fd);
+            return 0;
+        }
+        if (search_key >= 32 || n >= 99 || key >= 32 || isipaddr(ipaddr) == 0 || port >= 65536) {
+            // Invalid information
+            puts("\x1b[31m[!] Discarded message: invalid information\033[m");
+            reset_pmt(&buffer_size, &ni->pred_fd);
+            return 0;
+        }
+        unsigned int distance1 = ring_distance(ni->key, search_key), distance2 = ring_distance(ni->succ_id, search_key);
+        if (distance1 < distance2) {
+            // Search key belongs to this node
+            puts("\x1b[33m[*] Found the key!\033[m");
+            char message[64] = "";
+            sprintf(message, "RSP %u %u %u %s %u\n", ni->key, n, key, ipaddr, port);
+            int result = sendall(ni->succ_fd, message, strlen(message));
+            if (result != 0) {
+                // Couldn't send response message
+                puts("\x1b[31m[!] Couldn't send response message\033[m");
+                reset_pmt(&buffer_size, &ni->pred_fd);
+                return 0;
+            }
+            buffer_size = 0;
+            return 0;
+        }
+        else {
+            // Forward the message to successor
+            int result = sendall(ni->succ_fd, buffer, buffer_size);
+            if (result != 0) {
+                // Couldn't resend the message
+                puts("\x1b[31m[!] Couldn't resend the message\033[m");
+                reset_pmt(&buffer_size, &ni->pred_fd);
+                return 0;
+            }
+            buffer_size = 0;
+            return 0;
+        }
+    }
+    else if (strncmp(buffer, "RSP ", 4) == 0) {
+        unsigned int search_key, n, key, port;
+        char ipaddr[INET_ADDRSTRLEN] = "";
+        if (sscanf(buffer+4, "%u %u %u %16s %u\n", &search_key, &n, &key, ipaddr, &port) != 5) {
+            // Invalid format
+            puts("\x1b[31m[!] Discarded message: invalid format\033[m");
+            reset_pmt(&buffer_size, &ni->pred_fd);
+            return 0;
+        }
+        if (search_key >= 32 || n >= 99 || key >= 32 || isipaddr(ipaddr) == 0 || port >= 65536) {
+            // Invalid information
+            puts("\x1b[31m[!] Discarded message: invalid information\033[m");
+            reset_pmt(&buffer_size, &ni->pred_fd);
+            return 0;
+        }
+        if (key == ni->key) {
+            printf("Search result: %u\n", search_key);
+            buffer_size = 0;
+            return 0;
+        }
+        else {
+            // Forward the message to successor
+            int result = sendall(ni->succ_fd, buffer, buffer_size);
+            if (result != 0) {
+                // Couldn't resend the message
+                puts("\x1b[31m[!] Couldn't resend the message\033[m");
+                reset_pmt(&buffer_size, &ni->pred_fd);
+                return 0;
+            }
+            buffer_size = 0;
+            return 0;
+        }
     }
     else {
         // Message is invalid
-        reset_pmt(&buffer_size, &ni->temp_fd);
+        reset_pmt(&buffer_size, &ni->pred_fd);
         puts("\x1b[31m[!] Discarded message: length, termination or header\033[m");
         return 0;
     }

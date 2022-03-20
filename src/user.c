@@ -147,6 +147,10 @@ int process_user_message(t_nodeinfo *ni)
             puts("Invalid format. Usage: find k");
             return 0;
         }
+        if (key > 31) {
+            puts("Invalid key (maximum is 31)");
+            return 0;
+        }
         char message[64] = "";
         sprintf(message, "FND %u %u %u %s %s\n", key, ni->n, ni->key, ni->ipaddr, ni->self_port);
         if (sendall(ni->succ_fd, message, strlen(message)) != 0) {
