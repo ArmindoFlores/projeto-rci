@@ -175,6 +175,7 @@ def test_create_ring(executable, starting_port, verbosity=0):
    
     result = verify_self_message(message, [node_process], test_key, test_ip, test_port)
     if not result.success:
+        terminate_processes([node_process])
         server_socket.close()
         return result
 
