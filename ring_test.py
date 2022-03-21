@@ -498,6 +498,7 @@ def test_two_node_ring_leave(executable, starting_port, verbosity=0):
     ready = select.select([server_socket], [], [], 1)
     if not ready[0]:
         terminate_processes([node_process])
+        server_socket.close()
         return TestResult(False, "Sent 'SELF' message, node did not connect back", read_processes([node_process]))
 
     conn_socket, _ = server_socket.accept()
@@ -505,6 +506,8 @@ def test_two_node_ring_leave(executable, starting_port, verbosity=0):
    
     result = verify_self_message(message, [node_process], test_key, test_ip, test_port)
     if not result.success:
+        conn_socket.close()
+        server_socket.close()
         return result
 
     node_process.stdin.write("leave\n")
@@ -513,9 +516,13 @@ def test_two_node_ring_leave(executable, starting_port, verbosity=0):
     message = recv_message(client_socket, 1)
     result = verify_pred_message(message, [node_process], self_key, self_ip, self_port)
     if not result.success:
+        conn_socket.close()
+        server_socket.close()
         return result
 
     terminate_processes([node_process])
+    conn_socket.close()
+    server_socket.close()
     return TestResult(True)
 
 def test_three_node_ring_leave(executable, starting_port, verbosity=0):
