@@ -45,6 +45,12 @@ typedef struct nodeinfo {
     unsigned int succ_id;
     // Search sequence number
     unsigned int n;
+    // Search requests
+    unsigned int *requests;
+    // Number of ongoing requests
+    size_t ongoing_requests;
+    // Size of requests
+    size_t requests_size;
 } t_nodeinfo;
 
 enum type {
@@ -151,5 +157,31 @@ int sendall(int sd, char *message, size_t size);
  * @return [ @b t_read_out ] structure describing the result
  */
 t_read_out recv_message(int sd, char *buffer, char delim, size_t max_size, t_conn_info *ci);
+
+/**
+ * @brief Register a new "find" request
+ * 
+ * @param n request sequence number
+ * @param key the key that's being searched
+ * @param ni the t_nodeinfo object
+ */
+void register_request(unsigned int n, unsigned int key, t_nodeinfo *ni);
+
+/**
+ * @brief Get the key associated with a sequence number
+ * 
+ * @param n request sequence number
+ * @param ni the t_nodeinfo object
+ * @return [ @b int ] the key if it is found, -1 otherwise 
+ */
+int get_associated_key(unsigned int n, t_nodeinfo *ni);
+
+/**
+ * @brief Drop a "find" request
+ * 
+ * @param n request sequence number
+ * @param ni the t_nodeinfo object
+ */
+void drop_request(unsigned int n, t_nodeinfo *ni);
 
 #endif

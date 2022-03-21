@@ -71,7 +71,7 @@ void reset_conn_buffer(t_conn_info* ci)
 
 t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port)
 {
-    t_nodeinfo *ni = (t_nodeinfo*) malloc(sizeof(t_nodeinfo));
+    t_nodeinfo *ni = (t_nodeinfo*) calloc(1, sizeof(t_nodeinfo));
     ni->key = id;
     strncpy(ni->self_port, port, sizeof(ni->self_port)-1);
     strncpy(ni->ipaddr, ipaddr, sizeof(ni->ipaddr)-1);
@@ -89,7 +89,42 @@ t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port)
     ni->pred_id = 0;
     ni->succ_id = 0;
     ni->n = 0;
+    ni->ongoing_requests = 0;
+    ni->requests_size = 16;
+    ni->requests = (unsigned int*) calloc(ni->requests_size*2, sizeof(unsigned int));
     return ni;
+}
+
+void register_request(unsigned int n, unsigned int key, t_nodeinfo *ni)
+{
+    if (ni->ongoing_requests >= ni->requests_size) {
+        ni->requests_size *= 2;
+        ni->requests = (unsigned int*) realloc(ni->requests, ni->requests_size*2*sizeof(unsigned int));
+    }
+    ni->requests[ni->ongoing_requests*2] = n;
+    ni->requests[ni->ongoing_requests*2+1] = key;
+    ni->ongoing_requests++;
+}
+
+int get_associated_key(unsigned int n, t_nodeinfo *ni)
+{
+    for (size_t i = 0; i < ni->ongoing_requests; i++) {
+        if (ni->requests[i*2] == n)
+            return ni->requests[i*2+1];
+    }
+    return -1;
+}
+
+void drop_request(unsigned int n, t_nodeinfo *ni)
+{
+    for (size_t i = 0; i < ni->ongoing_requests; i++) {
+        if (ni->requests[i*2] == n) {
+            ni->requests[i*2] = ni->requests[ni->ongoing_requests*2];
+            ni->requests[i*2+1] = ni->requests[ni->ongoing_requests*2+1];
+            ni->ongoing_requests--;
+            break;
+        }
+    }
 }
 
 int maxfd(t_nodeinfo *si)
@@ -106,6 +141,7 @@ void free_nodeinfo(t_nodeinfo *ni)
         free_conn_info(ni->predecessor);
         free_conn_info(ni->successor);
         free_conn_info(ni->temp);
+        free(ni->requests);
         free(ni);
     }
 }

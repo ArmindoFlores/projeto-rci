@@ -272,7 +272,7 @@ int process_message_predecessor(t_nodeinfo *ni)
             // Search key belongs to this node
             puts("\x1b[33m[*] Found the key!\033[m");
             char message[64] = "";
-            sprintf(message, "RSP %u %u %u %s %u\n", ni->key, n, key, ipaddr, port);
+            sprintf(message, "RSP %u %u %u %s %s\n", ni->key, n, key, ni->ipaddr, ni->self_port);
             int result = sendall(ni->succ_fd, message, strlen(message));
             if (result != 0) {
                 // Couldn't send response message
@@ -312,7 +312,13 @@ int process_message_predecessor(t_nodeinfo *ni)
             return 0;
         }
         if (key == ni->key) {
-            printf("Search result: %u\n", search_key);
+            int request_key = get_associated_key(n, ni);
+            if (request_key == -1) {
+                puts("\x1b[33m[!] Received \"FND\" message without requesting it\033[m");
+                return 0;
+            }
+            drop_request(n, ni);
+            printf("Key %u belongs to node %u (%s:%u)\n", request_key, search_key, ipaddr, port);
             buffer_size = 0;
             return 0;
         }
@@ -382,7 +388,8 @@ int process_message_temp(t_nodeinfo *ni)
 
     // Message to be sent
     char message[64] = "";
-    if (ni->succ_fd != -1) {
+    // Only send PRED message if we have a successor and the node isn't entering 
+    if (ni->succ_fd != -1 && ring_distance(ni->key, mi.node_i) < ring_distance(ni->key, ni->succ_id)) {
         // There are already more than two nodes in this ring
         // Let the current successor know it has a new predecessor
         sprintf(message, "PRED %d %s %d\n", mi.node_i, mi.node_ip, mi.node_port);

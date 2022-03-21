@@ -97,6 +97,26 @@ int process_command_leave(t_nodeinfo *ni)
     return 1;
 }
 
+int process_command_find(unsigned int key, t_nodeinfo *ni)
+{
+    if (ni->succ_id && ring_distance(ni->key, key) < ring_distance(ni->key, ni->succ_id)) {
+        printf("Key %u belongs to node %u (%s:%s)\n", key, ni->key, ni->ipaddr, ni->self_port);
+        return 0;
+    }
+
+    register_request(ni->n, key, ni);
+
+    char message[64] = "";
+    sprintf(message, "FND %u %u %u %s %s\n", key, ni->n, ni->key, ni->ipaddr, ni->self_port);
+    if (sendall(ni->succ_fd, message, strlen(message)) != 0) {
+        puts("\x1b[31m[!] Error sending \"find\" message to successor\033[m");
+        return -1;
+    }
+    ni->n++;
+    ni->n %= 100;
+    return 0;
+}
+
 int process_user_message(t_nodeinfo *ni)
 {
     char buffer[128] = "";
@@ -151,12 +171,7 @@ int process_user_message(t_nodeinfo *ni)
             puts("Invalid key (maximum is 31)");
             return 0;
         }
-        char message[64] = "";
-        sprintf(message, "FND %u %u %u %s %s\n", key, ni->n, ni->key, ni->ipaddr, ni->self_port);
-        if (sendall(ni->succ_fd, message, strlen(message)) != 0) {
-            puts("\x1b[31m[!] Error sending \"find\" message to successor\033[m");
-        return -1;
-        }
+        return process_command_find(key, ni);
     }
     return 0;
 }
