@@ -34,6 +34,14 @@ int process_incoming_connection(t_nodeinfo *ni);
 int process_message_temp(t_nodeinfo *ni);
 
 /**
+ * @brief Process an incoming message from the UDP socket
+ * 
+ * @param ni necessary information about the node 
+ * @return [ @b int ] 0 if successfull, -1 otherwise 
+ */
+int process_message_udp(t_nodeinfo *ni);
+
+/**
  * @brief Process an incoming message from this node's successor
  * 
  * @param ni necessary information about the node 

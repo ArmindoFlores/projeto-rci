@@ -1,6 +1,7 @@
 #include "utils.h"
 #include <string.h>
-
+#include <stdio.h>
+#include <netdb.h>
 
 unsigned int strtoui(const char *str)
 {
@@ -27,6 +28,20 @@ int isipaddr(const char *str)
     struct sockaddr_in sa;
     int result = inet_pton(AF_INET, str, &(sa.sin_addr));
     return result > 0;
+}
+
+int generate_udp_addrinfo(char *ipaddr, unsigned int port, struct addrinfo **res)
+{
+    struct addrinfo hints;
+    char port_str[6] = "";
+    sprintf(port_str, "%u", port);
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_DGRAM;
+    if(getaddrinfo(ipaddr, port_str, &hints, res) != 0)
+        return -1;
+    return 0;
 }
 
 t_msginfo get_message_info(char *message, size_t message_size)

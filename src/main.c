@@ -20,6 +20,7 @@ char* get_event_string(t_event e)
         "E_MESSAGE_SUCCESSOR", 
         "E_MESSAGE_TEMP", 
         "E_MESSAGE_USER", 
+        "E_MESSAGE_UDP",
         "E_TIMEOUT", 
         "E_ERROR"
     };
@@ -83,6 +84,10 @@ int main(int argc, char *argv[])
             case E_INCOMING_CONNECTION:
                 // A client is trying to connect to us
                 result = process_incoming_connection(ni);
+                break;
+
+            case E_MESSAGE_UDP:
+                result = process_message_udp(ni);
                 break;
 
             case E_MESSAGE_TEMP:

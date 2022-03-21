@@ -1,9 +1,11 @@
+#define _POSIX_C_SOURCE 200112L
 #include "user.h"
 #include "server.h"
 #include "client.h"
 #include "utils.h"
 #include <stdio.h>
 #include <unistd.h>
+#include <netdb.h>
 #include <string.h>
 
 int process_command_new(t_nodeinfo *ni) {
@@ -172,6 +174,38 @@ int process_user_message(t_nodeinfo *ni)
             return 0;
         }
         return process_command_find(key, ni);
+    }
+    if (strncmp(buffer, "chord ", 6) == 0) {
+        unsigned int shcut_id, shcut_port;
+        char shcut_ipaddr[INET_ADDRSTRLEN] = "";
+        if (sscanf(buffer+6, "%u %16s %u", &shcut_id, shcut_ipaddr, &shcut_port) == 3) {   
+            if (shcut_id > 31 || shcut_id < 0) {
+                printf("Invalid shortcut node '%d'\n", shcut_id);
+                return 0;
+            }
+            if (!isipaddr(shcut_ipaddr)) {
+                printf("Invalid IP address '%s'\n", shcut_ipaddr);
+                return 0;
+            }
+            if (shcut_port > 65535 || shcut_port < 0) {
+                printf("Invalid port number '%d'\n", shcut_port);
+                return 0;
+            }    
+            if (ni->shcut_info != NULL)
+                freeaddrinfo(ni->shcut_info);
+            if (generate_udp_addrinfo(shcut_ipaddr, shcut_port, &ni->shcut_info) != 0) {
+                ni->shcut_info = NULL;
+                puts("[!] Couldn't create chord!");
+                return 0;
+            }
+            ni->shcut_id = shcut_id;
+            strcpy(ni->shcut_ip, shcut_ipaddr);
+            ni->shcut_port = shcut_port;
+            puts("\x1b[32m[*] Success!\033[m");
+        }
+        else {
+            puts("Invalid format. Usage: chord i i.IP i.port");
+        }
     }
     return 0;
 }

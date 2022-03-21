@@ -1,7 +1,9 @@
+#define _POSIX_C_SOURCE 200112L
 #include "common.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdio.h>
+#include <netdb.h>
 #include <errno.h>
 #define MAX(x, y) (x > y ? x : y)
 
@@ -76,6 +78,7 @@ t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port)
     strncpy(ni->self_port, port, sizeof(ni->self_port)-1);
     strncpy(ni->ipaddr, ipaddr, sizeof(ni->ipaddr)-1);
     ni->main_fd = -1;
+    ni->udp_fd = -1;
     ni->pred_fd = -1;
     ni->succ_fd = -1;
     ni->temp_fd = -1;
@@ -84,14 +87,18 @@ t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port)
     ni->temp = NULL;
     memset(ni->pred_ip, 0, sizeof(ni->pred_ip));
     memset(ni->succ_ip, 0, sizeof(ni->succ_ip));
+    memset(ni->shcut_ip, 0, sizeof(ni->shcut_ip));
     ni->pred_port = 0;
     ni->succ_port = 0;
+    ni->shcut_port = 0;
     ni->pred_id = 0;
     ni->succ_id = 0;
+    ni->shcut_id = 0;
     ni->n = 0;
     ni->ongoing_requests = 0;
     ni->requests_size = 16;
     ni->requests = (unsigned int*) calloc(ni->requests_size*2, sizeof(unsigned int));
+    ni->shcut_info = NULL;
     return ni;
 }
 
@@ -132,6 +139,7 @@ int maxfd(t_nodeinfo *si)
     int mx = MAX(si->main_fd, si->pred_fd);
     mx = MAX(mx, si->succ_fd);
     mx = MAX(mx, si->temp_fd);
+    mx = MAX(mx, si->udp_fd);
     return mx;
 }
 
@@ -142,20 +150,31 @@ void free_nodeinfo(t_nodeinfo *ni)
         free_conn_info(ni->successor);
         free_conn_info(ni->temp);
         free(ni->requests);
+        if (ni->shcut_info != NULL)
+            freeaddrinfo(ni->shcut_info);
         free(ni);
     }
 }
 
 int sendall(int sd, char *message, size_t size)
 {
-    char *buf = (char*) malloc(size + 1);
-    memcpy(buf, message, size);
-    buf[size] = '\0';
-    printf("\x1b[34m[+] %s\033[m\n", buf);
-    free(buf);
     size_t sent_bytes = 0;
     while (sent_bytes < size) {
-        int sent = send(sd, message+sent_bytes, size-sent_bytes, 0);
+        ssize_t sent = send(sd, message+sent_bytes, size-sent_bytes, 0);
+        if (sent < 0)
+            return sent;
+        if (sent == 0)
+            return -1;
+        sent_bytes += sent;
+    }
+    return 0;
+}
+
+int udpsend(int sd, char *message, size_t size, struct addrinfo *to)
+{
+    size_t sent_bytes = 0;
+    while (sent_bytes < size) {
+        ssize_t sent = sendto(sd, message+sent_bytes, size-sent_bytes, 0, to->ai_addr, to->ai_addrlen);
         if (sent < 0)
             return sent;
         if (sent == 0)

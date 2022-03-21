@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <netdb.h>
 #include <string.h>
+#include <limits.h>
 
 int init_server(t_nodeinfo *ni)
 {
@@ -42,6 +43,31 @@ int init_server(t_nodeinfo *ni)
         freeaddrinfo(res);
         return -1;
     }
+
+    freeaddrinfo(res);
+    hints.ai_socktype = SOCK_STREAM;
+
+    // Get address info
+    if (getaddrinfo(NULL, ni->self_port, &hints, &res) != 0) {
+        return -1;
+    }
+
+    // Create UDP socket
+    int udp_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (udp_fd == -1) {
+        close(main_fd);
+        freeaddrinfo(res);
+        return -1;
+    }
+
+    // Bind this address
+    if (bind(udp_fd, res->ai_addr, res->ai_addrlen) == -1) {
+        close(main_fd);
+        freeaddrinfo(res);
+        return -1;
+    }
+
+    ni->udp_fd = udp_fd;
 
     freeaddrinfo(res);
 
@@ -252,7 +278,6 @@ int process_message_predecessor(t_nodeinfo *ni)
         }
     }
     else if (strncmp(buffer, "FND ", 4) == 0) {
-        // FIXME: shortcuts aren't working 
         unsigned int search_key, n, key, port;
         char ipaddr[INET_ADDRSTRLEN] = "";
         if (sscanf(buffer+4, "%u %u %u %16s %u\n", &search_key, &n, &key, ipaddr, &port) != 5) {
@@ -267,8 +292,11 @@ int process_message_predecessor(t_nodeinfo *ni)
             reset_pmt(&buffer_size, &ni->pred_fd);
             return 0;
         }
-        unsigned int distance1 = ring_distance(ni->key, search_key), distance2 = ring_distance(ni->succ_id, search_key);
-        if (distance1 < distance2) {
+        // Calculate distance to self, successor, and shortcut
+        unsigned int distance_self = ring_distance(ni->key, search_key);
+        unsigned int distance_succ = ring_distance(ni->succ_id, search_key);
+        unsigned int distance_shcut = ni->shcut_info != NULL ? ring_distance(ni->shcut_id, search_key) : UINT_MAX;
+        if (distance_self < distance_succ && distance_self < distance_shcut) {
             // Search key belongs to this node
             puts("\x1b[33m[*] Found the key!\033[m");
             char message[64] = "";
@@ -283,9 +311,22 @@ int process_message_predecessor(t_nodeinfo *ni)
             buffer_size = 0;
             return 0;
         }
+        else if (distance_shcut < distance_succ) {
+            // Search key is closer to shortcut than to successor
+            puts("Trying to send message through shortcut");
+            int result = udpsend(ni->udp_fd, buffer, buffer_size, ni->shcut_info);
+            if (result != 0) {
+                // Couldn't resend the message
+                puts("\x1b[31m[!] Couldn't resend the message\033[m");
+                reset_pmt(&buffer_size, &ni->pred_fd);
+                return 0;
+            }
+            buffer_size = 0;
+            return 0;
+        }
         else {
             // Forward the message to successor
-            int result = sendall(ni->succ_fd, buffer, buffer_size);
+            int result = sendall(ni->udp_fd, buffer, buffer_size);
             if (result != 0) {
                 // Couldn't resend the message
                 puts("\x1b[31m[!] Couldn't resend the message\033[m");
@@ -319,6 +360,20 @@ int process_message_predecessor(t_nodeinfo *ni)
             }
             drop_request(n, ni);
             printf("Key %u belongs to node %u (%s:%u)\n", request_key, search_key, ipaddr, port);
+            buffer_size = 0;
+            return 0;
+        }
+        else if (ni->shcut_info && ring_distance(ni->shcut_id, key) < ring_distance(ni->succ_id, key)) {
+            // Forward the message to shortcut
+            // Search key is closer to shortcut than to successor
+            puts("Trying to send message through shortcut");
+            int result = udpsend(ni->succ_fd, buffer, buffer_size, ni->shcut_info);
+            if (result != 0) {
+                // Couldn't resend the message
+                puts("\x1b[31m[!] Couldn't resend the message\033[m");
+                reset_pmt(&buffer_size, &ni->pred_fd);
+                return 0;
+            }
             buffer_size = 0;
             return 0;
         }
@@ -461,5 +516,10 @@ int process_message_temp(t_nodeinfo *ni)
     reset_conn_buffer(ni->temp);   
     ni->temp_fd = -1;
 
+    return 0;
+}
+
+int process_message_udp(t_nodeinfo *ni)
+{
     return 0;
 }

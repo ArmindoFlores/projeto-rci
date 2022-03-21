@@ -1,7 +1,9 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#define _POSIX_C_SOURCE 200112L
 #include <stddef.h>
+#include <netdb.h>
 #include <arpa/inet.h>
 
 enum msginfotype {
@@ -48,6 +50,16 @@ int strisui(const char *str);
  * @return [ @b int ] 1 if true, 0 if false 
  */
 int isipaddr(const char *str);
+
+/**
+ * @brief Generate address information 
+ * 
+ * @param ipaddr the IP address
+ * @param port the port number
+ * @param res structure to store the result in
+ * @return [ @b int ] 0 if successfull, -1 otherwise 
+ */
+int generate_udp_addrinfo(char *ipaddr, unsigned int port, struct addrinfo **res);
 
 /**
  * @brief Get the node identifier, IP address and port from a SELF/PRED message

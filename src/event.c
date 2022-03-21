@@ -34,6 +34,8 @@ t_event select_event(t_nodeinfo* ni)
         FD_SET(ni->pred_fd, &read_fds);
     if (ni->temp_fd > 0)
         FD_SET(ni->temp_fd, &read_fds);
+    if (ni->udp_fd > 0)
+        FD_SET(ni->udp_fd, &read_fds);
 
     int count = select(fdmax+1, &read_fds, NULL, NULL, &SELECT_TIMEOUT);
     if (count < 0) {
@@ -47,6 +49,11 @@ t_event select_event(t_nodeinfo* ni)
             // Incoming connection
             FD_CLR(ni->main_fd, &read_fds);
             return E_INCOMING_CONNECTION;
+        }
+        else if (ni->udp_fd != -1 && FD_ISSET(ni->udp_fd, &read_fds)) {
+            // Incoming message from UDP socket
+            FD_CLR(ni->udp_fd, &read_fds);
+            return E_MESSAGE_UDP;
         }
         else if (ni->succ_fd != -1 && FD_ISSET(ni->succ_fd, &read_fds)) {
             // Incoming message from successor

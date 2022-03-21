@@ -51,6 +51,16 @@ typedef struct nodeinfo {
     size_t ongoing_requests;
     // Size of requests
     size_t requests_size;
+    // Socket file descriptor for UDP server
+    int udp_fd;
+    // Shortcut key
+    unsigned int shcut_id;
+    // Shortcut IP address
+    char shcut_ip[INET_ADDRSTRLEN];
+    // Shortcut port
+    unsigned int shcut_port;
+    // Shortcut network information
+    struct addrinfo *shcut_info;
 } t_nodeinfo;
 
 enum type {
@@ -145,6 +155,18 @@ void free_nodeinfo(t_nodeinfo *ni);
  * the number of bytes sent if another error occurred
  */
 int sendall(int sd, char *message, size_t size);
+
+/**
+ * @brief Send an entire message through a UDP socket
+ * 
+ * @param sd socket file descriptor
+ * @param message message to be sent
+ * @param size size of the message in bytes
+ * @param to address information of the recipient
+ * @return [ @b int ]  0 if successfull, -1 if the connection was closed, and
+ * the number of bytes sent if another error occurred
+ */
+int udpsend(int sd, char *message, size_t size, struct addrinfo *to);
 
 /**
  * @brief Receive a message through a socket
