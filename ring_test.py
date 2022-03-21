@@ -75,9 +75,12 @@ def create_tcp_server_socket(ip, port):
     return server_socket
 
 def create_tcp_client_socket(ip, port):
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect((ip, port))
-    return client_socket
+    try:
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.connect((ip, port))
+        return client_socket
+    except ConnectionRefusedError:
+        return None
 
 def terminate_processes(procs):
     for proc in procs:
@@ -162,6 +165,10 @@ def test_create_ring(args):
     server_socket = create_tcp_server_socket(self_ip, self_port)
 
     client_socket = create_tcp_client_socket(test_ip, test_port)
+    if client_socket is None:
+        terminate_processes([node_process])
+        server_socket.close()
+        return TestResult(False, "Node did not start listening for connections", read_processes([node_process]))
     client_socket.sendall(bytes(f"SELF {self_key} {self_ip} {self_port}\n", "utf-8"))
     
     ready = select.select([server_socket], [], [], 1)
@@ -257,6 +264,10 @@ def test_three_node_ring(args):
         return result
 
     client_socket = create_tcp_client_socket(test1_ip, test1_port)
+    if client_socket is None:
+        terminate_processes([node1_process, node2_process])
+        server_socket.close()
+        return TestResult(False, "Node did not start listening for connections", read_processes([node1_process, node2_process]))
     client_socket.sendall(bytes(f"SELF {self_key} {self_ip} {self_port}\n", "utf-8"))
 
     node2_process.stdin.write(f"pentry {test1_key} {test1_ip} {test1_port}\n")
@@ -308,6 +319,10 @@ def test_three_node_ring_enter(args):
     server_socket = create_tcp_server_socket(self_ip, self_port)
 
     client_socket = create_tcp_client_socket(test2_ip, test2_port)
+    if client_socket is None:
+        terminate_processes([node1_process, node2_process])
+        server_socket.close()
+        return TestResult(False, "Node did not start listening for connections", read_processes([node1_process, node2_process]))
     client_socket.sendall(bytes(f"SELF {self_key} {self_ip} {self_port}\n", "utf-8"))
 
     ready = select.select([server_socket], [], [], 1)
@@ -349,6 +364,10 @@ def test_slow_messages(args):
     server_socket = create_tcp_server_socket(self_ip, self_port)
     
     client_socket = create_tcp_client_socket(test_ip, test_port)
+    if client_socket is None:
+        terminate_processes([node_process])
+        server_socket.close()
+        return TestResult(False, "Node did not start listening for connections", read_processes([node_process]))
     client_socket.sendall(b"SELF")
     time.sleep(.01)
     client_socket.sendall(bytes(f" {self_key}", "utf-8"))
@@ -391,6 +410,9 @@ def test_invalid_message(args):
     time.sleep(.1)
     
     client_socket = create_tcp_client_socket(test_ip, test_port)
+    if client_socket is None:
+        terminate_processes([node_process])
+        return TestResult(False, "Node did not start listening for connections", read_processes([node_process]))
     client_socket.sendall(b"SELF xxxx invalid\n")
 
     time.sleep(.1)
@@ -423,6 +445,9 @@ def test_big_message(args):
     time.sleep(.1)
     
     client_socket = create_tcp_client_socket(test_ip, test_port)
+    if client_socket is None:
+        terminate_processes([node_process])
+        return TestResult(False, "Node did not start listening for connections", read_processes([node_process]))
     client_socket.sendall(b"abcd"*100000+b"\n")
 
     time.sleep(.1)
@@ -452,6 +477,10 @@ def test_two_node_other_ring_leave(args):
     server_socket = create_tcp_server_socket(self_ip, self_port)
 
     client_socket = create_tcp_client_socket(test_ip, test_port)
+    if client_socket is None:
+        terminate_processes([node_process])
+        server_socket.close()
+        return TestResult(False, "Node did not start listening for connections", read_processes([node_process]))
     client_socket.sendall(bytes(f"SELF {self_key} {self_ip} {self_port}\n", "utf-8"))
     
     ready = select.select([server_socket], [], [], 1)
@@ -501,6 +530,10 @@ def test_two_node_ring_leave(args):
     server_socket = create_tcp_server_socket(self_ip, self_port)
 
     client_socket = create_tcp_client_socket(test_ip, test_port)
+    if client_socket is None:
+        terminate_processes([node_process])
+        server_socket.close()
+        return TestResult(False, "Node did not start listening for connections", read_processes([node_process]))
     client_socket.sendall(bytes(f"SELF {self_key} {self_ip} {self_port}\n", "utf-8"))
     
     ready = select.select([server_socket], [], [], 1)
@@ -570,6 +603,10 @@ def test_three_node_ring_leave(args):
         return result
 
     client_socket = create_tcp_client_socket(test1_ip, test1_port)
+    if client_socket is None:
+        terminate_processes([node1_process, node2_process])
+        server_socket.close()
+        return TestResult(False, "Node did not start listening for connections", read_processes([node1_process, node2_process]))
     client_socket.sendall(bytes(f"SELF {self_key} {self_ip} {self_port}\n", "utf-8"))
 
     node2_process.stdin.write(f"pentry {test1_key} {test1_ip} {test1_port}\n")
