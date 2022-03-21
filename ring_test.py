@@ -313,7 +313,6 @@ def test_three_node_ring_enter(args):
 
     if node1_process.poll() is not None or node2_process.poll() is not None:
         terminate_processes([node1_process, node2_process])
-        server_socket.close()
         return TestResult(False, "One or more nodes exited before finishing test execution", read_processes([node1_process, node2_process]))
 
     server_socket = create_tcp_server_socket(self_ip, self_port)
