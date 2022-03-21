@@ -18,7 +18,6 @@ int init_server(t_nodeinfo *ni)
     if (main_fd == -1) {
         return -1;
     }
-    setsockopt(main_fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
     ni->main_fd = main_fd;
 
     struct addrinfo hints, *res;

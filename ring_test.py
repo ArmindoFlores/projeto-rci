@@ -60,7 +60,7 @@ def frmt_message(msg):
 
 def create_process(executable, key, ip, port):
     return subprocess.Popen(
-        [str(executable), str(key), str(ip), str(port)],
+        [str(args.executable), str(key), str(ip), str(port)],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         bufsize=1,
@@ -144,15 +144,15 @@ def verify_pred_message(msg, processes, test_key, test_ip, test_port):
         return TestResult(False, f"Invalid response received (port parameter '{port}' should be '{test_port}')", read_processes(processes))
     return TestResult(True)
 
-def test_create_ring(executable, starting_port, verbosity=0):
+def test_create_ring(args):
     test_key = 1
     test_ip = "127.0.0.1"
-    test_port = starting_port + 1
+    test_port = args.port + 1
     self_ip = "127.0.0.1"
-    self_port = starting_port + 2
+    self_port = args.port + 2
     self_key = 2
-
-    node_process = create_process(executable, test_key, test_ip, test_port)
+    args.port += 2
+    node_process = create_process(args.executable, test_key, test_ip, test_port)
 
     node_process.stdin.write("new\n")
     node_process.stdin.flush()
@@ -184,15 +184,16 @@ def test_create_ring(executable, starting_port, verbosity=0):
     server_socket.close()
     return TestResult(True)
 
-def test_join_ring(executable, starting_port, verbosity=0):
+def test_join_ring(args):
     test_key = 1
     test_ip = "127.0.0.1"
-    test_port = starting_port + 1
+    test_port = args.port + 1
     self_ip = "127.0.0.1"
-    self_port = starting_port + 2
+    self_port = args.port + 2
     self_key = 2
+    args.port += 2
 
-    node_process = create_process(executable, test_key, test_ip, test_port)
+    node_process = create_process(args.executable, test_key, test_ip, test_port)
 
     server_socket = create_tcp_server_socket(self_ip, self_port)
     
@@ -219,19 +220,20 @@ def test_join_ring(executable, starting_port, verbosity=0):
     server_socket.close()
     return TestResult(True)
 
-def test_three_node_ring(executable, starting_port, verbosity=0):
+def test_three_node_ring(args):
     test1_key = 2
     test1_ip = "127.0.0.1"
-    test1_port = starting_port + 2
+    test1_port = args.port + 2
     test2_key = 3
     test2_ip = "127.0.0.1"
-    test2_port = starting_port + 3
+    test2_port = args.port + 3
     self_ip = "127.0.0.1"
-    self_port = starting_port + 1
+    self_port = args.port + 1
     self_key = 1
+    args.port += 3
 
-    node1_process = create_process(executable, test1_key, test1_ip, test1_port)
-    node2_process = create_process(executable, test2_key, test2_ip, test2_port)
+    node1_process = create_process(args.executable, test1_key, test1_ip, test1_port)
+    node2_process = create_process(args.executable, test2_key, test2_ip, test2_port)
 
     server_socket = create_tcp_server_socket(self_ip, self_port)
     
@@ -273,19 +275,20 @@ def test_three_node_ring(executable, starting_port, verbosity=0):
     server_socket.close()
     return TestResult(True)
 
-def test_three_node_ring_enter(executable, starting_port, verbosity=0):
+def test_three_node_ring_enter(args):
     test1_key = 1
     test1_ip = "127.0.0.1"
-    test1_port = starting_port + 1
+    test1_port = args.port + 1
     test2_key = 2
     test2_ip = "127.0.0.1"
-    test2_port = starting_port + 2
+    test2_port = args.port + 2
     self_ip = "127.0.0.1"
-    self_port = starting_port + 3
+    self_port = args.port + 3
     self_key = 3
+    args.port += 3
 
-    node1_process = create_process(executable, test1_key, test1_ip, test1_port)
-    node2_process = create_process(executable, test2_key, test2_ip, test2_port)
+    node1_process = create_process(args.executable, test1_key, test1_ip, test1_port)
+    node2_process = create_process(args.executable, test2_key, test2_ip, test2_port)
 
     node1_process.stdin.write(f"new\n")
     node1_process.stdin.flush()
@@ -327,15 +330,16 @@ def test_three_node_ring_enter(executable, starting_port, verbosity=0):
     server_socket.close()
     return TestResult(True)
 
-def test_slow_messages(executable, starting_port, verbosity=0):
+def test_slow_messages(args):
     test_key = 1
     test_ip = "127.0.0.1"
-    test_port = starting_port + 1
+    test_port = args.port + 1
     self_key = 2
     self_ip = "127.0.0.1"
-    self_port = starting_port + 2
+    self_port = args.port + 2
+    args.port += 3
 
-    node_process = create_process(executable, test_key, test_ip, test_port)
+    node_process = create_process(args.executable, test_key, test_ip, test_port)
 
     node_process.stdin.write(f"new\n")
     node_process.stdin.flush()
@@ -373,12 +377,13 @@ def test_slow_messages(executable, starting_port, verbosity=0):
     server_socket.close()
     return TestResult(True)
 
-def test_invalid_message(executable, starting_port, verbosity=0):
+def test_invalid_message(args):
     test_key = 1
     test_ip = "127.0.0.1"
-    test_port = starting_port + 1
+    test_port = args.port + 1
+    args.port += 1
 
-    node_process = create_process(executable, test_key, test_ip, test_port)
+    node_process = create_process(args.executable, test_key, test_ip, test_port)
 
     node_process.stdin.write(f"new\n")
     node_process.stdin.flush()
@@ -404,12 +409,13 @@ def test_invalid_message(executable, starting_port, verbosity=0):
     terminate_processes([node_process])
     return TestResult(False, f"Node sent back '{frmt_message(message)}' when faced with an invalid message", read_processes([node_process]))
 
-def test_big_message(executable, starting_port, verbosity=0):
+def test_big_message(args):
     test_key = 1
     test_ip = "127.0.0.1"
-    test_port = starting_port + 1
+    test_port = args.port + 1
+    args.port += 1
 
-    node_process = create_process(executable, test_key, test_ip, test_port)
+    node_process = create_process(args.executable, test_key, test_ip, test_port)
 
     node_process.stdin.write(f"new\n")
     node_process.stdin.flush()
@@ -427,15 +433,16 @@ def test_big_message(executable, starting_port, verbosity=0):
     terminate_processes([node_process])
     return TestResult(True)
 
-def test_two_node_other_ring_leave(executable, starting_port, verbosity=0):
+def test_two_node_other_ring_leave(args):
     test_key = 1
     test_ip = "127.0.0.1"
-    test_port = starting_port + 1
+    test_port = args.port + 1
     self_ip = "127.0.0.1"
-    self_port = starting_port + 2
+    self_port = args.port + 2
     self_key = 2
+    args.port += 2
 
-    node_process = create_process(executable, test_key, test_ip, test_port)
+    node_process = create_process(args.executable, test_key, test_ip, test_port)
 
     node_process.stdin.write("new\n")
     node_process.stdin.flush()
@@ -475,15 +482,16 @@ def test_two_node_other_ring_leave(executable, starting_port, verbosity=0):
     terminate_processes([node_process])
     return TestResult(True)
 
-def test_two_node_ring_leave(executable, starting_port, verbosity=0):
+def test_two_node_ring_leave(args):
     test_key = 1
     test_ip = "127.0.0.1"
-    test_port = starting_port + 1
+    test_port = args.port + 1
     self_ip = "127.0.0.1"
-    self_port = starting_port + 2
+    self_port = args.port + 2
     self_key = 2
+    args.port += 2
 
-    node_process = create_process(executable, test_key, test_ip, test_port)
+    node_process = create_process(args.executable, test_key, test_ip, test_port)
 
     node_process.stdin.write("new\n")
     node_process.stdin.flush()
@@ -525,19 +533,20 @@ def test_two_node_ring_leave(executable, starting_port, verbosity=0):
     server_socket.close()
     return TestResult(True)
 
-def test_three_node_ring_leave(executable, starting_port, verbosity=0):
+def test_three_node_ring_leave(args):
     test1_key = 2
     test1_ip = "127.0.0.1"
-    test1_port = starting_port + 2
+    test1_port = args.port + 2
     test2_key = 3
     test2_ip = "127.0.0.1"
-    test2_port = starting_port + 3
+    test2_port = args.port + 3
     self_ip = "127.0.0.1"
-    self_port = starting_port + 1
+    self_port = args.port + 1
     self_key = 1
+    args.port += 3
 
-    node1_process = create_process(executable, test1_key, test1_ip, test1_port)
-    node2_process = create_process(executable, test2_key, test2_ip, test2_port)
+    node1_process = create_process(args.executable, test1_key, test1_ip, test1_port)
+    node2_process = create_process(args.executable, test2_key, test2_ip, test2_port)
 
     server_socket = create_tcp_server_socket(self_ip, self_port)
     
@@ -614,7 +623,7 @@ TESTS = {
 
 def build_parser():
     parser = argparse.ArgumentParser(description="Automated test suite for the 2021/2022 RCI project")
-    parser.add_argument("executable", help="The name of the executable to test")
+    parser.add_argument("executable", help="The name of the args.executable to test")
     parser.add_argument("-v", "--verbose", action="count", default=0, help="Change this program's verbosity")
     parser.add_argument("-p", "--port", type=int, default=36000, help="Starting port number. Defaults to 36000")
     return parser
@@ -622,7 +631,7 @@ def build_parser():
 def main(args):
     errors = 0
     for test_name, (test, _) in TESTS.items():
-        result = test(args.executable, args.port, args.verbose)
+        result = test(args)
         if result.success:
             if result.can_error:
                 cond_print(f"{colorama.Fore.GREEN}[+] Completed {test_name} test!{colorama.Fore.RESET}", verbosity=0, level=args.verbose)
