@@ -147,6 +147,13 @@ def verify_pred_message(msg, processes, test_key, test_ip, test_port):
         return TestResult(False, f"Invalid response received (port parameter '{port}' should be '{test_port}')", read_processes(processes))
     return TestResult(True)
 
+def process_rsp_message(msg):
+    try:
+        _, search_result, serial_n, key, ipaddr, port = msg[:-1].split(" ")
+        return search_result, serial_n, key, ipaddr, port
+    except (TypeError, ValueError):
+        return None
+
 def test_create_ring(args):
     test_key = 1
     test_ip = "127.0.0.1"
@@ -644,6 +651,203 @@ def test_three_node_ring_leave(args):
     server_socket.close()
     return TestResult(True)
 
+def test_find_no_shorts(args):
+    test1_key = 20
+    test1_ip = "127.0.0.1"
+    test1_port = args.port + 2
+    test2_key = 30
+    test2_ip = "127.0.0.1"
+    test2_port = args.port + 3
+    self_ip = "127.0.0.1"
+    self_port = args.port + 1
+    self_key = 10
+    args.port += 3
+
+    node1_process = create_process(args.executable, test1_key, test1_ip, test1_port)
+    node2_process = create_process(args.executable, test2_key, test2_ip, test2_port)
+
+    server_socket = create_tcp_server_socket(self_ip, self_port)
+    
+    node1_process.stdin.write(f"pentry {self_key} {self_ip} {self_port}\n")
+    node1_process.stdin.flush()
+
+    ready = select.select([server_socket], [], [], 1)
+    if not ready[0]:
+        terminate_processes([node1_process, node2_process])
+        server_socket.close()
+        return TestResult(False, "Sent 'pentry' command, node did not connect", read_processes([node1_process, node2_process]))
+
+    conn1_socket, _ = server_socket.accept()
+    message = recv_message(conn1_socket, 1)
+    
+    result = verify_self_message(message, [node1_process, node2_process], test1_key, test1_ip, test1_port)
+
+    if not result.success:
+        conn1_socket.close()
+        server_socket.close()
+        return result
+
+    client_socket = create_tcp_client_socket(test1_ip, test1_port)
+    if client_socket is None:
+        terminate_processes([node1_process, node2_process])
+        server_socket.close()
+        return TestResult(False, "Node did not start listening for connections", read_processes([node1_process, node2_process]))
+    client_socket.sendall(bytes(f"SELF {self_key} {self_ip} {self_port}\n", "utf-8"))
+
+    node2_process.stdin.write(f"pentry {test1_key} {test1_ip} {test1_port}\n")
+    node2_process.stdin.flush()
+
+    message = recv_message(client_socket, 1)
+    
+    result = verify_pred_message(message, [node1_process, node2_process], test2_key, test2_ip, test2_port)
+    if not result.success:
+        conn1_socket.close()
+        server_socket.close()
+        return result
+
+    client_socket.close()
+
+    client_socket = create_tcp_client_socket(test2_ip, test2_port)
+    if client_socket is None:
+        terminate_processes([node1_process, node2_process])
+        conn1_socket.close()
+        server_socket.close()
+        return TestResult(False, "Node did not start listening for connections", read_processes([node1_process, node2_process]))
+    client_socket.sendall(bytes(f"SELF {self_key} {self_ip} {self_port}\n", "utf-8"))
+
+    time.sleep(.1)
+
+    # Send all search requests
+    for search_key in range(32):
+        conn1_socket.sendall(bytes(f"FND {search_key} {search_key} {self_key} {self_ip} {self_port}\n", "utf-8"))
+
+    results = 0
+    while results < 32:
+        message = recv_message(client_socket, 1)
+        if message is None or len(message) == 0:
+            terminate_processes([node1_process, node2_process])
+            conn1_socket.close()
+            server_socket.close()
+            return TestResult(False, f"Did not receive a RSP message in time (got {results}/32)", read_processes([node1_process, node2_process]))
+        
+        if message.startswith("RSP "):
+            results += 1
+            processed = process_rsp_message(message)
+            if processed is None:
+                terminate_processes([node1_process, node2_process])
+                conn1_socket.close()
+                server_socket.close()
+                return TestResult(False, f"Received invalid response ('{frmt_message(message)}')", read_processes([node1_process, node2_process]))
+            
+            search_result, serial_n, key, ipaddr, port = processed
+            try:
+                search_result = int(search_result)
+            except ValueError:
+                terminate_processes([node1_process, node2_process])
+                conn1_socket.close()
+                server_socket.close()
+                return TestResult(False, f"Invalid value for parameter k '{search_result}' (should be a number between 0 and 31)", read_processes([node1_process, node2_process]))
+
+            try:
+                serial_n = int(serial_n)
+            except ValueError:
+                terminate_processes([node1_process, node2_process])
+                conn1_socket.close()
+                server_socket.close()
+                return TestResult(False, f"Invalid value for parameter n '{serial_n}' (should be a number between 0 and 99)", read_processes([node1_process, node2_process]))
+
+            try:
+                port = int(port)
+            except ValueError:
+                terminate_processes([node1_process, node2_process])
+                conn1_socket.close()
+                server_socket.close()
+                return TestResult(False, f"Invalid value for parameter n '{port}' (should be a number between 0 and 65535)", read_processes([node1_process, node2_process]))
+
+            try:
+                key = int(key)
+            except ValueError:
+                terminate_processes([node1_process, node2_process])
+                conn1_socket.close()
+                server_socket.close()
+                return TestResult(False, f"Invalid value for parameter n '{key}' (should be a number between 0 and 31)", read_processes([node1_process, node2_process]))
+
+            if serial_n >= 20 and serial_n < 30:
+                if search_result != 20:
+                    terminate_processes([node1_process, node2_process])
+                    conn1_socket.close()
+                    server_socket.close()
+                    return TestResult(False, f"Received wrong result (search for key {serial_n} should yield 20, but instead got {search_result})", read_processes([node1_process, node2_process]))
+
+            elif serial_n >= 30 or serial_n < 10:
+                if search_result != 30:
+                    terminate_processes([node1_process, node2_process])
+                    conn1_socket.close()
+                    server_socket.close()
+                    return TestResult(False, f"Received wrong result (search for key {serial_n} should yield 30, but instead got {search_result})", read_processes([node1_process, node2_process]))
+        
+        elif message.startswith("FND "):
+            # This is actually a find message
+            processed = process_rsp_message(message)
+            if processed is None:
+                terminate_processes([node1_process, node2_process])
+                conn1_socket.close()
+                server_socket.close()
+                return TestResult(False, f"Received invalid response ('{frmt_message(message)}')", read_processes([node1_process, node2_process]))
+
+            search_result, serial_n, key, ipaddr, port = processed
+            try:
+                search_result = int(search_result)
+            except ValueError:
+                terminate_processes([node1_process, node2_process])
+                conn1_socket.close()
+                server_socket.close()
+                return TestResult(False, f"Invalid value for parameter k '{search_result}' (should be a number between 0 and 31)", read_processes([node1_process, node2_process]))
+
+            try:
+                serial_n = int(serial_n)
+            except ValueError:
+                terminate_processes([node1_process, node2_process])
+                conn1_socket.close()
+                server_socket.close()
+                return TestResult(False, f"Invalid value for parameter n '{serial_n}' (should be a number between 0 and 99)", read_processes([node1_process, node2_process]))
+
+            try:
+                port = int(port)
+            except ValueError:
+                terminate_processes([node1_process, node2_process])
+                conn1_socket.close()
+                server_socket.close()
+                return TestResult(False, f"Invalid value for parameter n '{port}' (should be a number between 0 and 65535)", read_processes([node1_process, node2_process]))
+
+            try:
+                key = int(key)
+            except ValueError:
+                terminate_processes([node1_process, node2_process])
+                conn1_socket.close()
+                server_socket.close()
+                return TestResult(False, f"Invalid value for parameter n '{key}' (should be a number between 0 and 31)", read_processes([node1_process, node2_process]))
+
+            if serial_n >= 10 and serial_n < 20:
+                if search_result != serial_n:
+                    terminate_processes([node1_process, node2_process])
+                    conn1_socket.close()
+                    server_socket.close()
+                    return TestResult(False, "Received wrong 'FND' message (parameters n and k should stay constant)", read_processes([node1_process, node2_process]))
+                results += 1
+            
+        else:
+            terminate_processes([node1_process, node2_process])
+            conn1_socket.close()
+            server_socket.close()
+            return TestResult(False, f"Received invalid message prefix '{message.split(' ')[0]}'", read_processes([node1_process, node2_process]))
+
+
+    terminate_processes([node1_process, node2_process])
+    conn1_socket.close()
+    server_socket.close()
+    return TestResult(True)
+
 TESTS = {
     "TWO_NODE_CREATE_RING": (test_create_ring, None),
     "TWO_NODE_JOIN_RING": (test_join_ring, None),
@@ -652,6 +856,7 @@ TESTS = {
     "TWO_NODE_RING_LEAVE": (test_two_node_ring_leave, None),
     "TWO_NODE_OTHER_RING_LEAVE": (test_two_node_other_ring_leave, None),
     "THREE_NODE_RING_LEAVE": (test_three_node_ring_leave, None),
+    "FIND_NO_SHORTS": (test_find_no_shorts, None),
     "BIG_MESSAGE": (test_big_message, None),
     "SLOW_MESSAGES": (test_slow_messages, None),
     "INVALID_MESSAGE": (test_invalid_message, None),
