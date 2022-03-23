@@ -106,7 +106,10 @@ int process_command_find(unsigned int key, t_nodeinfo *ni)
         return 0;
     }
 
-    register_request(ni->n, key, ni);
+    if (register_request(ni->n, key, ni) < 0) {
+        puts("Find request queue is full, try again later");
+        return 0;
+    }
 
     char message[64] = "";
     sprintf(message, "FND %u %u %u %s %s\n", key, ni->n, ni->key, ni->ipaddr, ni->self_port);

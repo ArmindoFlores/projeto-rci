@@ -45,7 +45,7 @@ def recv_message(s, timeout):
         ready = select.select([s], [], [], timeout)
         if not ready[0]:
             return ""
-        data = s.recv(2048).decode()
+        data = s.recv(2048).decode(errors="ignore")
         if len(data) == 0:
             return None
         recv_message.__messages[s] += data
@@ -374,13 +374,19 @@ def test_slow_messages(args):
         terminate_processes([node_process])
         server_socket.close()
         return TestResult(False, "Node did not start listening for connections", read_processes([node_process]))
-    client_socket.sendall(b"SELF")
-    time.sleep(.01)
-    client_socket.sendall(bytes(f" {self_key}", "utf-8"))
-    time.sleep(.01)
-    client_socket.sendall(bytes(f" {self_ip}", "utf-8"))
-    time.sleep(.01)
-    client_socket.sendall(bytes(f" {self_port}\n", "utf-8"))
+
+    try:
+        client_socket.sendall(b"SELF")
+        time.sleep(.01)
+        client_socket.sendall(bytes(f" {self_key}", "utf-8"))
+        time.sleep(.01)
+        client_socket.sendall(bytes(f" {self_ip}", "utf-8"))
+        time.sleep(.01)
+        client_socket.sendall(bytes(f" {self_port}\n", "utf-8"))
+    except BrokenPipeError:
+        terminate_processes([node_process])
+        server_socket.close()
+        return TestResult(False, "Node closed the connection before receiving the full message", read_processes([node_process]))
 
     ready = select.select([server_socket], [], [], 1)
     if not ready[0]:

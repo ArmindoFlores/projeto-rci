@@ -46,11 +46,7 @@ typedef struct nodeinfo {
     // Search sequence number
     unsigned int n;
     // Search requests
-    unsigned int *requests;
-    // Number of ongoing requests
-    size_t ongoing_requests;
-    // Size of requests
-    size_t requests_size;
+    int requests[100];
     // Socket file descriptor for UDP server
     int udp_fd;
     // Shortcut key
@@ -186,8 +182,9 @@ t_read_out recv_message(int sd, char *buffer, char delim, size_t max_size, t_con
  * @param n request sequence number
  * @param key the key that's being searched
  * @param ni the t_nodeinfo object
+ * @return [ @b int ] 0 if successfull, -1 otherwise
  */
-void register_request(unsigned int n, unsigned int key, t_nodeinfo *ni);
+int register_request(unsigned int n, unsigned int key, t_nodeinfo *ni);
 
 /**
  * @brief Get the key associated with a sequence number

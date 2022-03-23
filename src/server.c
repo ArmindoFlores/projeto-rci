@@ -326,7 +326,7 @@ int process_message_predecessor(t_nodeinfo *ni)
         }
         else {
             // Forward the message to successor
-            int result = sendall(ni->udp_fd, buffer, buffer_size);
+            int result = sendall(ni->succ_fd, buffer, buffer_size);
             if (result != 0) {
                 // Couldn't resend the message
                 puts("\x1b[31m[!] Couldn't resend the message\033[m");

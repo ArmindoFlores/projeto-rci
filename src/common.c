@@ -95,43 +95,34 @@ t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port)
     ni->succ_id = 0;
     ni->shcut_id = 0;
     ni->n = 0;
-    ni->ongoing_requests = 0;
-    ni->requests_size = 16;
-    ni->requests = (unsigned int*) calloc(ni->requests_size*2, sizeof(unsigned int));
+    for (size_t i = 0; i < sizeof(ni->requests) / sizeof(int); i++)
+        ni->requests[i] = -1;
     ni->shcut_info = NULL;
     return ni;
 }
 
-void register_request(unsigned int n, unsigned int key, t_nodeinfo *ni)
+int register_request(unsigned int n, unsigned int key, t_nodeinfo *ni)
 {
-    if (ni->ongoing_requests >= ni->requests_size) {
-        ni->requests_size *= 2;
-        ni->requests = (unsigned int*) realloc(ni->requests, ni->requests_size*2*sizeof(unsigned int));
-    }
-    ni->requests[ni->ongoing_requests*2] = n;
-    ni->requests[ni->ongoing_requests*2+1] = key;
-    ni->ongoing_requests++;
+    if (n >= sizeof(ni->requests) / sizeof(int))
+        return -1;
+    if (ni->requests[n] != -1)
+        return -1;
+
+    ni->requests[n] = key;
+    return 0;
 }
 
 int get_associated_key(unsigned int n, t_nodeinfo *ni)
 {
-    for (size_t i = 0; i < ni->ongoing_requests; i++) {
-        if (ni->requests[i*2] == n)
-            return ni->requests[i*2+1];
-    }
-    return -1;
+    if (n >= sizeof(ni->requests) / sizeof(int))
+        return -1;
+    return ni->requests[n];
 }
 
 void drop_request(unsigned int n, t_nodeinfo *ni)
 {
-    for (size_t i = 0; i < ni->ongoing_requests; i++) {
-        if (ni->requests[i*2] == n) {
-            ni->requests[i*2] = ni->requests[ni->ongoing_requests*2];
-            ni->requests[i*2+1] = ni->requests[ni->ongoing_requests*2+1];
-            ni->ongoing_requests--;
-            break;
-        }
-    }
+    if (n < sizeof(ni->requests) / sizeof(int))
+        ni->requests[n] = -1;
 }
 
 int maxfd(t_nodeinfo *si)
@@ -149,7 +140,6 @@ void free_nodeinfo(t_nodeinfo *ni)
         free_conn_info(ni->predecessor);
         free_conn_info(ni->successor);
         free_conn_info(ni->temp);
-        free(ni->requests);
         if (ni->shcut_info != NULL)
             freeaddrinfo(ni->shcut_info);
         free(ni);
