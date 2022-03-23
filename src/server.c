@@ -500,6 +500,8 @@ int process_message_temp(t_nodeinfo *ni)
     }
 
     // Set this node's successor to be the current connection
+    if (ni->succ_fd != -1)
+        close(ni->succ_fd);
     ni->succ_fd = ni->temp_fd;
     ni->succ_id = node_i;
     strcpy(ni->succ_ip, node_ip);
