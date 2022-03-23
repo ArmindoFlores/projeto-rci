@@ -345,7 +345,7 @@ int process_message_predecessor(t_nodeinfo *ni)
         if (key == ni->key) {
             int request_key = get_associated_key(n, ni);
             if (request_key == -1) {
-                puts("\x1b[33m[!] Received \"FND\" message without requesting it\033[m");
+                puts("\x1b[33m[!] Received \"RSP\" message without requesting it\033[m");
                 return 0;
             }
             drop_request(n, ni);
