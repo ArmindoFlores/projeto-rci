@@ -149,7 +149,7 @@ int process_user_message(t_nodeinfo *ni)
         }
         int pred, port;
         char ipaddr[INET_ADDRSTRLEN] = "";
-        if (sscanf(buffer+6, " %u %16s %u\n", &pred, ipaddr, &port) == 3) {
+        if (sscanf(buffer+6, " %u %15s %u\n", &pred, ipaddr, &port) == 3) {
             ipaddr[15] = '\0';            
             return process_command_pentry(pred, port, ipaddr, ni);
         }
@@ -181,7 +181,7 @@ int process_user_message(t_nodeinfo *ni)
     if (strncmp(buffer, "chord ", 6) == 0) {
         unsigned int shcut_id, shcut_port;
         char shcut_ipaddr[INET_ADDRSTRLEN] = "";
-        if (sscanf(buffer+6, "%u %16s %u", &shcut_id, shcut_ipaddr, &shcut_port) == 3) {   
+        if (sscanf(buffer+6, "%u %15s %u", &shcut_id, shcut_ipaddr, &shcut_port) == 3) {   
             if (shcut_id > 31 || shcut_id < 0) {
                 printf("Invalid shortcut node '%d'\n", shcut_id);
                 return 0;

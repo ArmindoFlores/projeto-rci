@@ -6,26 +6,15 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 
-enum msginfotype {
+typedef enum msginfotype {
     MI_SUCCESS,
     MI_INVALID_PORT,
     MI_INVALID_ID,
     MI_INVALID_IP,
-    MI_NO_PORT,
-    MI_NO_ID,
-    MI_NO_IP
-};
-
-typedef struct msginfo {
-    // Node identifier
-    unsigned int node_i;
-    // Node port
-    unsigned int node_port;
-    // Node IP address
-    char node_ip[INET_ADDRSTRLEN];
-    // Type of the message
-    enum msginfotype type;
-} t_msginfo;
+    MI_INVALID_K,
+    MI_INVALID_N,
+    MI_INVALID
+} t_msginfotype;
 
 /**
  * @brief Converts a string to an unsigned integer
@@ -65,10 +54,25 @@ int generate_udp_addrinfo(char *ipaddr, unsigned int port, struct addrinfo **res
  * @brief Get the node identifier, IP address and port from a SELF/PRED message
  * 
  * @param message the message containing the information
- * @param message_size size of the message
- * @return [ @b t_msginfo ] object containing the requested information 
+ * @param node_i where to store the node identifier
+ * @param node_ip where to store the node IP address
+ * @param node_port where to store the node port
+ * @return [ @b t_msginfotype ] type of result
  */
-t_msginfo get_message_info(char *message, size_t message_size);
+t_msginfotype get_self_or_pred_message_info(char *message, unsigned int *node_i, char *node_ip, unsigned int *node_port);
+
+/**
+ * @brief Get the search key/result, serial number, node identifier, IP address and port from a FND/RSP message
+ * 
+ * @param message the message containing the information
+ * @param k where to store the search key/result
+ * @param n where to store the search serial number
+ * @param node_i where to store the node identifier
+ * @param node_ip where to store the node IP address
+ * @param node_port where to store the node port
+ * @return [ @b t_msginfotype ] type of result
+ */
+t_msginfotype get_fnd_or_rsp_message_info(char *message, unsigned int *k, unsigned int *n, unsigned int *node_i, char *node_ip, unsigned int *node_port);
 
 /**
  * @brief Fills @b dest with the IP address contained in @b sa

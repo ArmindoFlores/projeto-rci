@@ -44,80 +44,64 @@ int generate_udp_addrinfo(char *ipaddr, unsigned int port, struct addrinfo **res
     return 0;
 }
 
-t_msginfo get_message_info(char *message, size_t message_size)
+t_msginfotype get_self_or_pred_message_info(char *message, unsigned int *node_i, char *node_ip, unsigned int *node_port)
 {
-    t_msginfo result;
-    memset(&result, 0, sizeof(result));
-
-    // Pointer to the ' ' character before the node identifier
-    char *i_start = strchr(message, ' ');
-    if (i_start == NULL)  {
-        result.type = MI_NO_ID;
-        return result;
+    if (sscanf(message+5, "%u %15s %u", node_i, node_ip, node_port) != 3) {
+        // Invalid message
+        return MI_INVALID;
     }
 
-    // Pointer to the ' ' character before the node IP
-    char *ip_start = strchr(i_start+1, ' ');
-    if (ip_start == NULL) {
+    if (*node_i > 32) {
+        // Node key is invalid
+        return MI_INVALID_ID;
+    }
+
+    if (*node_port > 65535) {
         // Message is invalid
-        result.type = MI_NO_IP;
-        return result;
-    }
-    // Pointer to the ' ' character before the node port
-    char *port_start = strchr(ip_start+1, ' ');
-    if (port_start == NULL) {
-        // Message is invalid
-        result.type = MI_NO_PORT;
-        return result;
+        return MI_INVALID_PORT;
     }
 
-    // This buffer will be used to convert strings to other data types
-    char convert_buffer[64];
-
-    // Find node_i
-    memcpy(convert_buffer, i_start+1, ip_start-i_start-1);
-    convert_buffer[ip_start-i_start-1] = '\0';
-    if (!strisui(convert_buffer)) {
-        // Message is invalid
-        result.type = MI_INVALID_ID;
-        return result;
-    }
-    // Node identifier
-    result.node_i = strtoui(convert_buffer);
-    if (result.node_i > 32) {
-        result.type = MI_INVALID_ID;
-        return result;
+    if (!isipaddr(node_ip)) {
+        // IP address is invalid
+        return MI_INVALID_IP;
     }
 
-    // Find node_ip
-    memcpy(convert_buffer, ip_start+1, port_start-ip_start-1);
-    convert_buffer[port_start-ip_start-1] = '\0';
-    if (!isipaddr(convert_buffer)) {
-        // Message is invalid
-        result.type = MI_INVALID_IP;
-        return result;
-    }
-    // Node IP address
-    strcpy(result.node_ip, convert_buffer);
+    return MI_SUCCESS;
+}
 
-    // Find node_port
-    memcpy(convert_buffer, port_start+1, message_size-(int)(port_start-message)-2);
-    convert_buffer[message_size-(int)(port_start-message)-2] = '\0';
-    if (!strisui(convert_buffer)) {
-        // Message is invalid
-        result.type = MI_INVALID_PORT;
-        return result;
-    }
-    // Node port
-    result.node_port = strtoui(convert_buffer);
-    if (result.node_port > 65535) {
-        // Message is invalid
-        result.type = MI_INVALID_PORT;
-        return result;
+t_msginfotype get_fnd_or_rsp_message_info(char *message, unsigned int *k, unsigned int *n, unsigned int *node_i, char *node_ip, unsigned int *node_port)
+{
+    if (sscanf(message+4, "%u %u %u %15s %u", k, n, node_i, node_ip, node_port) != 5) {
+        // Invalid message
+        return MI_INVALID;
     }
 
-    result.type = MI_SUCCESS;
-    return result;
+    if (*k > 32) {
+        // Search key / result is invalid
+        return MI_INVALID_K;
+    }
+
+    if (*n > 99) {
+        // Serial number is invalid
+        return MI_INVALID_N;
+    }
+
+    if (*node_i > 32) {
+        // Node key is invalid
+        return MI_INVALID_ID;
+    }
+
+    if (*node_port > 65535) {
+        // Message is invalid
+        return MI_INVALID_PORT;
+    }
+
+    if (!isipaddr(node_ip)) {
+        // IP address is invalid
+        return MI_INVALID_IP;
+    }
+
+    return MI_SUCCESS;
 }
 
 void ipaddr_from_sockaddr(struct sockaddr *sa, char *dest)

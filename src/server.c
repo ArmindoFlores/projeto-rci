@@ -234,27 +234,29 @@ int process_message_predecessor(t_nodeinfo *ni)
     }
 
     if (strncmp(buffer, "PRED ", 5) == 0) {
-        t_msginfo mi = get_message_info(buffer, buffer_size);
-        if (mi.type != MI_SUCCESS) {
+        unsigned int node_i, node_port;
+        char node_ip[INET_ADDRSTRLEN] = "";
+        t_msginfotype mi = get_self_or_pred_message_info(buffer, &node_i, node_ip, &node_port);
+        if (mi != MI_SUCCESS) {
             printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor): '%s'\033[m\n", ni->pred_ip, ni->pred_port, buffer);
             reset_pmt(&buffer_size, &ni->temp_fd);
             return 0;
         }
 
-        printf("\x1b[32m[*] Received PRED message from %s:%d, setting node %d (%s:%d) as predecessor\033[m\n", ni->pred_ip, ni->pred_port, mi.node_i, mi.node_ip, mi.node_port);
+        printf("\x1b[32m[*] Received PRED message from %s:%d, setting node %d (%s:%d) as predecessor\033[m\n", ni->pred_ip, ni->pred_port, node_i, node_ip, node_port);
 
         char portstr[6] = "";
-        snprintf(portstr, sizeof(portstr), "%d", mi.node_port);
+        snprintf(portstr, sizeof(portstr), "%d", node_port);
 
         // Open a connection to the new predecessor
-        int result = init_client(mi.node_ip, portstr, ni);
+        int result = init_client(node_ip, portstr, ni);
         if (result != 0) {
             // An error occurred
             return -1;
         }
 
         buffer_size = 0;
-        ni->pred_id = mi.node_i;
+        ni->pred_id = node_i;
 
         // Message to be sent
         char message[64] = "";
@@ -280,15 +282,9 @@ int process_message_predecessor(t_nodeinfo *ni)
     else if (strncmp(buffer, "FND ", 4) == 0) {
         unsigned int search_key, n, key, port;
         char ipaddr[INET_ADDRSTRLEN] = "";
-        if (sscanf(buffer+4, "%u %u %u %16s %u\n", &search_key, &n, &key, ipaddr, &port) != 5) {
-            // Invalid format
-            puts("\x1b[31m[!] Discarded message: invalid format\033[m");
-            reset_pmt(&buffer_size, &ni->pred_fd);
-            return 0;
-        }
-        if (search_key >= 32 || n >= 99 || key >= 32 || isipaddr(ipaddr) == 0 || port >= 65536) {
-            // Invalid information
-            puts("\x1b[31m[!] Discarded message: invalid information\033[m");
+        t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
+        if (mi != MI_SUCCESS) {
+            printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor): '%s'\033[m\n", ni->pred_ip, ni->pred_port, buffer);
             reset_pmt(&buffer_size, &ni->pred_fd);
             return 0;
         }
@@ -340,15 +336,9 @@ int process_message_predecessor(t_nodeinfo *ni)
     else if (strncmp(buffer, "RSP ", 4) == 0) {
         unsigned int search_key, n, key, port;
         char ipaddr[INET_ADDRSTRLEN] = "";
-        if (sscanf(buffer+4, "%u %u %u %16s %u\n", &search_key, &n, &key, ipaddr, &port) != 5) {
-            // Invalid format
-            puts("\x1b[31m[!] Discarded message: invalid format\033[m");
-            reset_pmt(&buffer_size, &ni->pred_fd);
-            return 0;
-        }
-        if (search_key >= 32 || n >= 99 || key >= 32 || isipaddr(ipaddr) == 0 || port >= 65536) {
-            // Invalid information
-            puts("\x1b[31m[!] Discarded message: invalid information\033[m");
+        t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
+        if (mi != MI_SUCCESS) {
+            printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor): '%s'\033[m\n", ni->pred_ip, ni->pred_port, buffer);
             reset_pmt(&buffer_size, &ni->pred_fd);
             return 0;
         }
@@ -431,23 +421,25 @@ int process_message_temp(t_nodeinfo *ni)
         return 0;
     }
 
-    t_msginfo mi = get_message_info(buffer, buffer_size);
-    if (mi.type != MI_SUCCESS) {
+    unsigned int node_i, node_port;
+    char node_ip[INET_ADDRSTRLEN] = "";
+    t_msginfotype mi = get_self_or_pred_message_info(buffer, &node_i, node_ip, &node_port);
+    if (mi != MI_SUCCESS) {
         puts("\x1b[31m[!] Received malformatted message\033[m");
         reset_pmt(&buffer_size, &ni->temp_fd);
         return 0;
     }
 
-    printf("\x1b[32m[*] Received SELF message, setting node %d (%s:%d) as successor\033[m\n", mi.node_i, mi.node_ip, mi.node_port);
+    printf("\x1b[32m[*] Received SELF message, setting node %d (%s:%d) as successor\033[m\n", node_i, node_ip, node_port);
     buffer_size = 0;
 
     // Message to be sent
     char message[64] = "";
     // Only send PRED message if we have a successor and the node isn't entering 
-    if (ni->succ_fd != -1 && ring_distance(ni->key, mi.node_i) < ring_distance(ni->key, ni->succ_id)) {
+    if (ni->succ_fd != -1 && ring_distance(ni->key, node_i) < ring_distance(ni->key, ni->succ_id)) {
         // There are already more than two nodes in this ring
         // Let the current successor know it has a new predecessor
-        sprintf(message, "PRED %d %s %d\n", mi.node_i, mi.node_ip, mi.node_port);
+        sprintf(message, "PRED %d %s %d\n", node_i, node_ip, node_port);
         int result = sendall(ni->succ_fd, message, strlen(message));
         if (result < 0) {
             // Successor disconnected
@@ -470,10 +462,10 @@ int process_message_temp(t_nodeinfo *ni)
         int result;
 
         char portstr[6] = "";
-        snprintf(portstr, sizeof(portstr), "%d", mi.node_port);
+        snprintf(portstr, sizeof(portstr), "%d", node_port);
 
         // Set the connecting node to also be this node's predecessor
-        result = init_client(mi.node_ip, portstr, ni);
+        result = init_client(node_ip, portstr, ni);
         if (result != 0) {
             // Error: couldn't establish connection
             // This is still recoverable as there is only one node in the ring
@@ -482,14 +474,14 @@ int process_message_temp(t_nodeinfo *ni)
             return 0;
         }
 
-        ni->pred_id = mi.node_i;
+        ni->pred_id = node_i;
 
         sprintf(message, "SELF %d %s %s\n", ni->key, ni->ipaddr, ni->self_port);
         result = sendall(ni->pred_fd, message, strlen(message));
         if (result < 0) {
             // Temporary connection is over
             // This isn't a problem and won't break any rings
-            printf("\x1b[33[!] Client (%s:%d) disconnected before joining the ring\033[m\n", mi.node_ip, mi.node_port);
+            printf("\x1b[33[!] Client (%s:%d) disconnected before joining the ring\033[m\n", node_ip, node_port);
             if (ni->pred_fd >= 0)
                 close(ni->pred_fd);
             ni->pred_fd = -1;
@@ -508,9 +500,9 @@ int process_message_temp(t_nodeinfo *ni)
 
     // Set this node's successor to be the current connection
     ni->succ_fd = ni->temp_fd;
-    ni->succ_id = mi.node_i;
-    strcpy(ni->succ_ip, mi.node_ip);
-    ni->succ_port = mi.node_port; 
+    ni->succ_id = node_i;
+    strcpy(ni->succ_ip, node_ip);
+    ni->succ_port = node_port; 
     copy_conn_info(&ni->successor, ni->temp);
 
     reset_conn_buffer(ni->temp);   
@@ -521,5 +513,17 @@ int process_message_temp(t_nodeinfo *ni)
 
 int process_message_udp(t_nodeinfo *ni)
 {
+    struct sockaddr addr;
+    socklen_t addrlen = sizeof(addr);
+    char buffer[64] = "";
+    
+    ssize_t recvd_bytes = recvfrom(ni->udp_fd, buffer, sizeof(buffer) - 1, 0, &addr, &addrlen);
+    if (recvd_bytes > 30) {
+        // Invalid message
+        puts("\x1b[33[!] Received invalid UDP message\033[m");
+    }
+
+    puts("\x1b[33[!] Received UDP message, don't know what to do\033[m");
+
     return 0;
 }
