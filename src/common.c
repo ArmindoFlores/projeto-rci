@@ -98,6 +98,7 @@ t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port)
     for (size_t i = 0; i < sizeof(ni->requests) / sizeof(int); i++)
         ni->requests[i] = -1;
     ni->shcut_info = NULL;
+    ni->waiting_for_chord_ack = 0;
     return ni;
 }
 

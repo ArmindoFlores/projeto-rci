@@ -57,6 +57,8 @@ typedef struct nodeinfo {
     unsigned int shcut_port;
     // Shortcut network information
     struct addrinfo *shcut_info;
+    // Whether the node is waiting for its chord do acknowledge a message
+    int waiting_for_chord_ack;
 } t_nodeinfo;
 
 enum type {

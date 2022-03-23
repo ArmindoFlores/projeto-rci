@@ -207,7 +207,6 @@ int process_message_successor(t_nodeinfo *ni)
 
 int process_message_predecessor(t_nodeinfo *ni)
 {
-    //! This function is a work-in-progress
     // This is the internal buffer that keep track of what has been
     // sent through ni->pred_fd
     static char buffer[64];
@@ -317,6 +316,7 @@ int process_message_predecessor(t_nodeinfo *ni)
                 reset_pmt(&buffer_size, &ni->pred_fd);
                 return 0;
             }
+            ni->waiting_for_chord_ack = 1;
             buffer_size = 0;
             return 0;
         }
@@ -364,6 +364,7 @@ int process_message_predecessor(t_nodeinfo *ni)
                 reset_pmt(&buffer_size, &ni->pred_fd);
                 return 0;
             }
+            ni->waiting_for_chord_ack = 1;
             buffer_size = 0;
             return 0;
         }
@@ -511,19 +512,94 @@ int process_message_temp(t_nodeinfo *ni)
     return 0;
 }
 
+int cmp_addr(struct sockaddr *a1, struct sockaddr *a2)
+{
+    struct sockaddr_in *addr1 = (struct sockaddr_in*) a1, *addr2 = (struct sockaddr_in*) a2;
+    return addr1->sin_addr.s_addr == addr2->sin_addr.s_addr
+        && addr1->sin_port == addr2->sin_port;
+}
+
 int process_message_udp(t_nodeinfo *ni)
 {
-    struct sockaddr addr;
-    socklen_t addrlen = sizeof(addr);
+    struct addrinfo sender;
+    struct sockaddr_in addr;
+    sender.ai_addr = (struct sockaddr*) &addr;
+    sender.ai_addrlen = sizeof(addr);
+
     char buffer[64] = "";
     
-    ssize_t recvd_bytes = recvfrom(ni->udp_fd, buffer, sizeof(buffer) - 1, 0, &addr, &addrlen);
+    ssize_t recvd_bytes = recvfrom(ni->udp_fd, buffer, sizeof(buffer) - 1, 0, sender.ai_addr, &sender.ai_addrlen);
     if (recvd_bytes > 30) {
         // Invalid message
         puts("\x1b[33[!] Received invalid UDP message\033[m");
     }
+    buffer[recvd_bytes] = '\0';
 
-    puts("\x1b[33[!] Received UDP message, don't know what to do\033[m");
+    if (strcmp(buffer, "ACK") == 0) {
+        if (ni->waiting_for_chord_ack && ni->shcut_info && cmp_addr(ni->shcut_info->ai_addr, sender.ai_addr)) {
+            // We successfully sent a FND/RSP message through a chord
+            ni->waiting_for_chord_ack = 0;
+        }
+        else {
+            // Random ACK message??
+            // FIXME: Could be from a node trying to connect
+            puts("\x1b[33[!] Received an unprompted \"ACK\" message");
+        }
+        return 0;
+    }
+    else if (strncmp(buffer, "FND ", 4) == 0) {
+        unsigned int search_key, n, key, port;
+        char ipaddr[INET_ADDRSTRLEN] = "";
+        
+        t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
+        if (mi == MI_SUCCESS) {
+            puts("\x1b[32[*] Received 'FND' message, responding\033[m");
+            udpsend(ni->udp_fd, "ACK", 3, &sender);
+
+        unsigned int distance_self = ring_distance(ni->key, search_key);
+        unsigned int distance_succ = ring_distance(ni->succ_id, search_key);
+        unsigned int distance_shcut = ni->shcut_info != NULL ? ring_distance(ni->shcut_id, search_key) : UINT_MAX;
+        if (distance_self < distance_succ && distance_self < distance_shcut) {
+            // Search key belongs to this node
+            puts("\x1b[33m[*] Found the key!\033[m");
+            char message[64] = "";
+            sprintf(message, "RSP %u %u %u %s %s\n", ni->key, n, key, ni->ipaddr, ni->self_port);
+            int result = sendall(ni->succ_fd, message, strlen(message));
+            if (result != 0) {
+                // Couldn't send response message
+                puts("\x1b[31m[!] Couldn't send response message\033[m");
+                return 0;
+            }
+            return 0;
+        }
+        else if (distance_shcut < distance_succ) {
+            // Search key is closer to shortcut than to successor
+            puts("Trying to send message through shortcut");
+            int result = udpsend(ni->udp_fd, buffer, strlen(buffer), ni->shcut_info);
+            if (result != 0) {
+                // Couldn't resend the message
+                puts("\x1b[31m[!] Couldn't resend the message\033[m");
+                return 0;
+            }
+            ni->waiting_for_chord_ack = 1;
+            return 0;
+        }
+        else {
+            // Forward the message to successor
+            int result = sendall(ni->succ_fd, buffer, strlen(buffer));
+            if (result != 0) {
+                // Couldn't resend the message
+                puts("\x1b[31m[!] Couldn't resend the message\033[m");
+                return 0;
+            }
+            return 0;
+        }
+
+            return 0;
+        }
+    }
+
+    printf("\x1b[33[!] Received invalid UDP message: '%s'\033[m\n", buffer);
 
     return 0;
 }
