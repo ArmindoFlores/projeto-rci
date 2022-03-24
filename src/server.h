@@ -18,6 +18,16 @@ int init_server(t_nodeinfo *ni);
 void close_server(t_nodeinfo *ni);
 
 /**
+ * @brief Send a message to either successor or shortcut (whichever is closest)
+ * 
+ * @param message the message to be sent
+ * @param key final message destination
+ * @param ni necessary information about the node
+ * @return [ @b int ] 0 if successfull, -1 otherwise 
+ */
+int send_to_closest(char *message, unsigned int key, t_nodeinfo *ni);
+
+/**
  * @brief Process an incoming connection
  * 
  * @param ni necessary information about the node
