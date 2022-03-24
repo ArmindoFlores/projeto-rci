@@ -67,13 +67,17 @@ int main(int argc, char *argv[])
     // }
 
     // Main loop
+    printf(">>> ");
+    fflush(stdout);
     while (1) {
-        fflush(stdout);
         // printf("[*] Waiting for events...\n");
 
         // This calls select() and may block
         // Returns after an event happens
         t_event e = select_event(ni);
+
+        if (e != E_MESSAGE_USER && e != E_TIMEOUT)
+            printf("\x08\x08\x08\x08");
 
         if (e != E_TIMEOUT)
             printf("[*] Got new event '%s'\n", get_event_string(e));
@@ -118,6 +122,12 @@ int main(int argc, char *argv[])
         }
         if (result > 0)
             break;
+
+                    
+        if (e != E_TIMEOUT) {
+            printf(">>> ");
+            fflush(stdout);
+        }
     }
 
     close_sockets(ni);
