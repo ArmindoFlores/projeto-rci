@@ -89,6 +89,7 @@ t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port)
     memset(ni->pred_ip, 0, sizeof(ni->pred_ip));
     memset(ni->succ_ip, 0, sizeof(ni->succ_ip));
     memset(ni->shcut_ip, 0, sizeof(ni->shcut_ip));
+    memset(ni->ongoing_udp_message, 0, sizeof(ni->ongoing_udp_message));
     ni->pred_port = 0;
     ni->succ_port = 0;
     ni->shcut_port = 0;
@@ -100,6 +101,7 @@ t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port)
         ni->requests[i] = -1;
     ni->shcut_info = NULL;
     ni->waiting_for_chord_ack = 0;
+    ni->req_start = 0;
     return ni;
 }
 

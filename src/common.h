@@ -4,12 +4,14 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <time.h>
 
 /**
  * @brief An object that holds information about a network connection
  * 
  */
 typedef struct conn_info t_conn_info;
+
 typedef struct nodeinfo {
     // Node key
     unsigned int key;
@@ -59,6 +61,10 @@ typedef struct nodeinfo {
     struct addrinfo *shcut_info;
     // Whether the node is waiting for its chord do acknowledge a message
     int waiting_for_chord_ack;
+    // When the UDP message was sent
+    clock_t req_start;
+    // The type of message that's been waited for
+    char ongoing_udp_message[64];
 } t_nodeinfo;
 
 enum type {

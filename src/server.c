@@ -11,6 +11,7 @@
 #include <netdb.h>
 #include <string.h>
 #include <limits.h>
+#include <time.h>
 
 int init_server(t_nodeinfo *ni)
 {
@@ -78,7 +79,7 @@ int send_to_closest(char *message, unsigned int key, t_nodeinfo *ni)
 {
     unsigned int distance_succ = ring_distance(ni->succ_id, key);
     unsigned int distance_shcut = ni->shcut_info != NULL ? ring_distance(ni->shcut_id, key) : UINT_MAX;
-    if (distance_shcut < distance_succ) {
+    if (distance_shcut < distance_succ && !ni->waiting_for_chord_ack) {
         // Search key is closer to shortcut than to successor
         puts("Trying to send message through shortcut");
         int result = udpsend(ni->udp_fd, message, strlen(message)-1, ni->shcut_info);
@@ -88,6 +89,8 @@ int send_to_closest(char *message, unsigned int key, t_nodeinfo *ni)
             return -1;
         }
         ni->waiting_for_chord_ack = 1;
+        ni->req_start = clock();
+        strcpy(ni->ongoing_udp_message, message); 
         return 0;
     }
     else {
@@ -362,7 +365,7 @@ int process_message_predecessor(t_nodeinfo *ni)
     else {
         // Message is invalid
         reset_pmt(&buffer_size, &ni->pred_fd);
-        puts("\x1b[31m[!] Discarded message: length, termination or header\033[m");
+        printf("\x1b[31m[!] Discarded message: length, termination or header ('%s')\033[m\n", buffer);
         return 0;
     }
 

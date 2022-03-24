@@ -8,7 +8,7 @@
 
 t_event select_event(t_nodeinfo* ni)
 {
-    struct timeval SELECT_TIMEOUT = { .tv_sec = 0, .tv_usec = 100000 };
+    struct timeval SELECT_TIMEOUT = { .tv_sec = 0, .tv_usec = 1000 };
 
     // If there's pending reads in any of the connections, do them first
     if (ni->succ_fd > 0 && has_available_data(ni->successor))

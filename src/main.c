@@ -6,6 +6,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "user.h"
 #include "utils.h"
 #include "client.h"
@@ -29,6 +30,29 @@ char* get_event_string(t_event e)
 
 void usage(char *name) {
     printf("Usage: ./%s ID IPADDR PORT\n", name);
+}
+
+void check_for_lost_udp_messages(t_nodeinfo *ni)
+{
+    if (ni->waiting_for_chord_ack) {
+        clock_t now = clock();
+        double time_taken = ((double) (now - ni->req_start)) / CLOCKS_PER_SEC;
+        if (time_taken > 0.005) {
+            // Timeout
+            puts("Found timed out UDP message, sending through TCP");
+            ni->waiting_for_chord_ack = 0;
+            int result = sendall(ni->succ_fd, ni->ongoing_udp_message, strlen(ni->ongoing_udp_message));
+            if (result < 0) {
+                close(ni->succ_fd);
+                ni->succ_fd = -1;
+            }
+            else if (result > 0) {
+                // An error occurred
+                close(ni->succ_fd);
+                ni->succ_fd = -1;
+            }
+        }
+    }
 }
 
 int main(int argc, char *argv[])
@@ -75,6 +99,9 @@ int main(int argc, char *argv[])
         // This calls select() and may block
         // Returns after an event happens
         t_event e = select_event(ni);
+
+        // First of all, check for lost UDP messages
+        check_for_lost_udp_messages(ni);
 
         if (e != E_MESSAGE_USER && e != E_TIMEOUT)
             printf("\x08\x08\x08\x08");
