@@ -62,21 +62,26 @@ int process_command_show(t_nodeinfo *ni)
     puts("\x1b[34m[*] Node Status\033[m");
         
     // Node info
-    printf("This node info:\n* Key: %u\n* IP: %s\n* Port: %s\n", ni->key, ni->ipaddr, ni->self_port);
+    printf("This node info: %u\t%s\t%s\n", ni->key, ni->ipaddr, ni->self_port);
 
     // Node successor info
     if (ni->succ_fd == -1)
-        puts("\x1b[31mThis node doesn't have a successor!\033[m");
+        puts("Successor node info: \x1b[31mN/D\033[m");
     else
-        printf("Successor node info (%d):\n* Key: %u\n* IP: %s\n* Port: %u\n", ni->succ_fd, ni->succ_id, ni->succ_ip, ni->succ_port);
+        printf("Successor node info: %u\t%s\t%u\n", ni->succ_id, ni->succ_ip, ni->succ_port);
 
     // Node predecessor info
     if (ni->pred_fd == -1)
-        puts("\x1b[31mThis node doesn't have a predecessor!\033[m");
+        puts("Predecessor node info: \x1b[31mN/D\033[m");
     else
-        printf("Predecessor node info (%d):\n* Key: %u\n* IP: %s\n* Port: %u\n", ni->pred_fd, ni->pred_id, ni->pred_ip, ni->pred_port);
+        printf("Predecessor node info: %u\t%s\t%u\n", ni->pred_id, ni->pred_ip, ni->pred_port);
 
-    // TODO (iv) Shortcut info
+    // Shortcut info
+    if (ni->shcut_info == NULL)
+        puts("Shortcut node info: \x1b[31mN/D\033[m");
+    else
+        printf("Shortcut node info:\n* Key: %u\t%s\t%u\n", ni->shcut_id, ni->shcut_ip, ni->shcut_port);
+
     return 0;
 }
 
