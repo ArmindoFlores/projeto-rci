@@ -115,6 +115,18 @@ int send_to_closest(char *message, unsigned int key, t_nodeinfo *ni)
     return 0;
 }
 
+void process_found_key(unsigned int search_key, unsigned int n, char *ipaddr, unsigned int port, t_nodeinfo* ni)
+{
+    int request_key = get_associated_key(n, ni);
+    if (request_key == -1) {
+        puts("\x1b[33m[!] Received \"RSP\" message without requesting it\033[m");
+    }
+    else {
+        drop_request(n, ni);
+        printf("Key %u belongs to node %u (%s:%u)\n", request_key, search_key, ipaddr, port);
+    }
+}
+
 int process_incoming_connection(t_nodeinfo *ni)
 {
     struct sockaddr addr;
@@ -324,13 +336,9 @@ int process_message_predecessor(t_nodeinfo *ni)
             puts("\x1b[33m[*] Found the key!\033[m");
             char message[64] = "";
             sprintf(message, "RSP %u %u %u %s %s\n", ni->key, n, key, ni->ipaddr, ni->self_port);
-            int result = sendall(ni->succ_fd, message, strlen(message));
-            if (result != 0) {
-                // Couldn't send response message
-                puts("\x1b[31m[!] Couldn't send response message\033[m");
+            int result = send_to_closest(message, key, ni);
+            if (result != 0)
                 reset_pmt(&buffer_size, &ni->pred_fd);
-                return 0;
-            }
             buffer_size = 0;
             return 0;
         }
@@ -352,15 +360,8 @@ int process_message_predecessor(t_nodeinfo *ni)
             return 0;
         }
         if (key == ni->key) {
-            int request_key = get_associated_key(n, ni);
-            if (request_key == -1) {
-                puts("\x1b[33m[!] Received \"RSP\" message without requesting it\033[m");
-                return 0;
-            }
-            drop_request(n, ni);
-            printf("Key %u belongs to node %u (%s:%u)\n", request_key, search_key, ipaddr, port);
+            process_found_key(search_key, n, ipaddr, port, ni);
             buffer_size = 0;
-            return 0;
         }
         else {
             int result = send_to_closest(buffer, search_key, ni);
@@ -554,18 +555,28 @@ int process_message_udp(t_nodeinfo *ni)
                 puts("\x1b[33m[*] Found the key!\033[m");
                 char message[64] = "";
                 sprintf(message, "RSP %u %u %u %s %s\n", ni->key, n, key, ni->ipaddr, ni->self_port);
-                int result = sendall(ni->succ_fd, message, strlen(message));
-                if (result != 0) {
-                    // Couldn't send response message
-                    puts("\x1b[31m[!] Couldn't send response message\033[m");
-                    return 0;
-                }
-                return 0;
+                send_to_closest(message, key, ni);
             }
             else {
                 send_to_closest(buffer, search_key, ni);
-                return 0;
             }
+
+            return 0;
+        }
+    }
+    else if (strncmp(buffer, "RSP ", 4) == 0) {
+        unsigned int search_key, n, key, port;
+        char ipaddr[INET_ADDRSTRLEN] = "";
+        
+        t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
+        if (mi == MI_SUCCESS) {
+            puts("\x1b[32[*] Received 'RSP' message, responding\033[m");
+            udpsend(ni->udp_fd, "ACK", 3, &sender);
+
+            if (key == ni->key)
+                process_found_key(search_key, n, ipaddr, port, ni);
+            else
+                send_to_closest(buffer, key, ni);
 
             return 0;
         }
