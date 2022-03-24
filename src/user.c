@@ -113,10 +113,11 @@ int process_command_find(unsigned int key, t_nodeinfo *ni)
 
     char message[64] = "";
     sprintf(message, "FND %u %u %u %s %s\n", key, ni->n, ni->key, ni->ipaddr, ni->self_port);
-    if (sendall(ni->succ_fd, message, strlen(message)) != 0) {
-        puts("\x1b[31m[!] Error sending \"find\" message to successor\033[m");
-        return -1;
-    }
+    
+    int result = send_to_closest(message, key, ni);
+    if (result < 0)
+        return 0;
+
     ni->n++;
     ni->n %= 100;
     return 0;
