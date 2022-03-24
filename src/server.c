@@ -81,7 +81,7 @@ int send_to_closest(char *message, unsigned int key, t_nodeinfo *ni)
     if (distance_shcut < distance_succ) {
         // Search key is closer to shortcut than to successor
         puts("Trying to send message through shortcut");
-        int result = udpsend(ni->udp_fd, message, strlen(message), ni->shcut_info);
+        int result = udpsend(ni->udp_fd, message, strlen(message)-1, ni->shcut_info);
         if (result != 0) {
             // Couldn't resend the message
             puts("\x1b[31m[!] Couldn't resend the message\033[m");
@@ -533,7 +533,7 @@ int process_message_udp(t_nodeinfo *ni)
         
         t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
         if (mi == MI_SUCCESS) {
-            puts("\x1b[32[*] Received 'FND' message, responding\033[m");
+            puts("\x1b[32m[*] Received 'FND' message, responding\033[m");
             udpsend(ni->udp_fd, "ACK", 3, &sender);
 
             unsigned int distance_self = ring_distance(ni->key, search_key);
@@ -546,6 +546,7 @@ int process_message_udp(t_nodeinfo *ni)
                 send_to_closest(message, key, ni);
             }
             else {
+                strcat(buffer, "\n");
                 send_to_closest(buffer, search_key, ni);
             }
 
@@ -563,8 +564,10 @@ int process_message_udp(t_nodeinfo *ni)
 
             if (key == ni->key)
                 process_found_key(search_key, n, ipaddr, port, ni);
-            else
+            else {
+                strcat(buffer, "\n");
                 send_to_closest(buffer, key, ni);
+            }
 
             return 0;
         }
