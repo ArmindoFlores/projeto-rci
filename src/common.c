@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <netdb.h>
 #include <errno.h>
+#include <unistd.h>
 #define MAX(x, y) (x > y ? x : y)
 
 struct conn_info {
@@ -239,4 +240,18 @@ t_read_out recv_message(int sd, char *buffer, char delim, size_t max_size, t_con
 
     result.read_type = RO_SUCCESS;
     return result;
+}
+
+void close_sockets(t_nodeinfo *ni)
+{
+    if (ni->main_fd >= 0)
+        close(ni->main_fd);
+    if (ni->pred_fd >= 0)
+        close(ni->pred_fd);
+    if (ni->succ_fd >= 0)
+        close(ni->succ_fd);
+    if (ni->temp_fd >= 0)
+        close(ni->temp_fd);
+    if (ni->udp_fd >= 0)
+        close(ni->udp_fd);
 }

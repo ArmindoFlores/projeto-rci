@@ -12,12 +12,6 @@
 int init_server(t_nodeinfo *ni);
 
 /**
- * @brief Closes the server and frees associated memory
- * 
- * @param ni necessary information about the node */
-void close_server(t_nodeinfo *ni);
-
-/**
  * @brief Send a message to either successor or shortcut (whichever is closest)
  * 
  * @param message the message to be sent

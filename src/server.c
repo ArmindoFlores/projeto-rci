@@ -74,18 +74,6 @@ int init_server(t_nodeinfo *ni)
     return 0;
 }
 
-void close_server(t_nodeinfo *ni)
-{
-    if (ni->main_fd >= 0)
-        close(ni->main_fd);
-    if (ni->pred_fd >= 0)
-        close(ni->pred_fd);
-    if (ni->succ_fd >= 0)
-        close(ni->succ_fd);
-    if (ni->temp_fd >= 0)
-        close(ni->temp_fd);
-}
-
 int send_to_closest(char *message, unsigned int key, t_nodeinfo *ni)
 {
     unsigned int distance_succ = ring_distance(ni->succ_id, key);

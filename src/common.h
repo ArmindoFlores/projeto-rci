@@ -205,4 +205,10 @@ int get_associated_key(unsigned int n, t_nodeinfo *ni);
  */
 void drop_request(unsigned int n, t_nodeinfo *ni);
 
+/**
+ * @brief Closes all sockets and frees associated memory
+ * 
+ * @param ni necessary information about the node */
+void close_sockets(t_nodeinfo *ni);
+
 #endif

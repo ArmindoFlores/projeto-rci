@@ -854,6 +854,90 @@ def test_find_no_shorts(args):
     server_socket.close()
     return TestResult(True)
 
+def test_find_with_shorts(args):
+    test1_key = 0
+    test1_ip = "127.0.0.1"
+    test1_port = args.port + 1
+    test2_key = 10
+    test2_ip = "127.0.0.1"
+    test2_port = args.port + 2
+    test3_key = 20
+    test3_ip = "127.0.0.1"
+    test3_port = args.port + 3
+    self_ip = "127.0.0.1"
+    self_port = args.port + 4
+    self_key = 30
+    args.port += 4
+
+    node1_process = create_process(args.executable, test1_key, test1_ip, test1_port)
+    node2_process = create_process(args.executable, test2_key, test2_ip, test2_port)
+    node3_process = create_process(args.executable, test3_key, test3_ip, test3_port)
+    
+    node1_process.stdin.write(f"new\n")
+    node1_process.stdin.flush()
+
+    time.sleep(.1)
+
+    node2_process.stdin.write(f"pentry {test1_key} {test1_ip} {test1_port}\n")
+    node2_process.stdin.flush()
+
+    time.sleep(.1)
+
+    node3_process.stdin.write(f"pentry {test2_key} {test2_ip} {test2_port}\n")
+    node3_process.stdin.flush()
+
+    time.sleep(.1)
+
+    server_socket = create_tcp_server_socket(self_ip, self_port)
+    client_socket = create_tcp_client_socket(test2_ip, test2_port)
+    client_socket.sendall(bytes(f"SELF {self_key} {self_ip} {self_port}\n", "utf-8"))
+
+    ready = select.select([server_socket], [], [], 1)
+    if not ready[0]:
+        terminate_processes([node1_process, node2_process, node3_process])
+        server_socket.close()
+        return TestResult(False, "Sent 'pentry' command, node did not connect", read_processes([node1_process, node2_process, node3_process]))
+
+    conn1_socket, _ = server_socket.accept()
+    message = recv_message(conn1_socket, 1)
+    
+    result = verify_self_message(message, [node1_process, node2_process], test1_key, test1_ip, test1_port)
+
+    if not result.success:
+        conn1_socket.close()
+        server_socket.close()
+        return result
+
+    client_socket = create_tcp_client_socket(test1_ip, test1_port)
+    if client_socket is None:
+        terminate_processes([node1_process, node2_process])
+        server_socket.close()
+        return TestResult(False, "Node did not start listening for connections", read_processes([node1_process, node2_process]))
+    client_socket.sendall(bytes(f"SELF {self_key} {self_ip} {self_port}\n", "utf-8"))
+
+    node2_process.stdin.write(f"pentry {test1_key} {test1_ip} {test1_port}\n")
+    node2_process.stdin.flush()
+
+    message = recv_message(client_socket, 1)
+    
+    result = verify_pred_message(message, [node1_process, node2_process], test2_key, test2_ip, test2_port)
+    if not result.success:
+        conn1_socket.close()
+        server_socket.close()
+        return result
+
+    client_socket.close()
+
+    client_socket = create_tcp_client_socket(test2_ip, test2_port)
+    if client_socket is None:
+        terminate_processes([node1_process, node2_process])
+        conn1_socket.close()
+        server_socket.close()
+        return TestResult(False, "Node did not start listening for connections", read_processes([node1_process, node2_process]))
+    client_socket.sendall(bytes(f"SELF {self_key} {self_ip} {self_port}\n", "utf-8"))
+
+    time.sleep(.1)
+
 TESTS = {
     "TWO_NODE_CREATE_RING": (test_create_ring, None),
     "TWO_NODE_JOIN_RING": (test_join_ring, None),

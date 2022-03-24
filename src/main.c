@@ -120,7 +120,7 @@ int main(int argc, char *argv[])
             break;
     }
 
-    close_server(ni);
+    close_sockets(ni);
     free_nodeinfo(ni);
     return 0;
 }
