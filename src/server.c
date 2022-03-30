@@ -581,7 +581,7 @@ int process_message_udp(t_nodeinfo *ni)
         
         t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
         if (mi == MI_SUCCESS) {
-            puts("\x1b[32[*] Received 'RSP' message, responding\033[m");
+            puts("\x1b[32m[*] Received 'RSP' message, responding\033[m");
             udpsend(ni->udp_fd, "ACK", 3, &sender);
 
             if (key == ni->key)

@@ -188,7 +188,7 @@ int process_command_exit(t_nodeinfo *ni)
 
 int process_command_find(unsigned int key, t_nodeinfo *ni)
 {
-    if ((ni->succ_fd == -1 && ni->pred_fd == -1) || (ni->succ_id && ring_distance(ni->key, key) < ring_distance(ni->key, ni->succ_id))) {
+    if ((ni->succ_id == ni->key && ni->pred_id == ni->key) || (ni->succ_id && ring_distance(ni->key, key) < ring_distance(ni->key, ni->succ_id))) {
         printf("Key %u belongs to node %u (%s:%s)\n", key, ni->key, ni->ipaddr, ni->self_port);
         return 0;
     }
