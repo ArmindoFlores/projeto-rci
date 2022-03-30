@@ -29,7 +29,7 @@ int init_server(t_nodeinfo *ni)
     hints.ai_flags = AI_PASSIVE;
 
     // Get address info
-    if (getaddrinfo(NULL, ni->self_port, &hints, &res) != 0) {
+    if (getaddrinfo(ni->ipaddr, ni->self_port, &hints, &res) != 0) {
         return -1;
     }
 
