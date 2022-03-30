@@ -57,31 +57,60 @@ int process_command_pentry(int pred, int port, char *ipaddr, t_nodeinfo *ni)
     return 0;
 }
 
+void print_space(unsigned int n)
+{
+    for (unsigned int i = 0; i < n; i++)
+        putchar(' ');
+}
+
+void print_info(char *name, unsigned int key, char *ipaddr, unsigned int port, int exists)
+{
+    size_t name_len = strlen(name), ipaddr_len = strlen(ipaddr);
+    char key_str[4], port_str[6];
+
+    // Print name
+    print_space((13 - name_len) / 2 + (13 - name_len) % 2);
+    if (exists)
+        printf("%s", name);
+    else
+        printf("\x1b[31m%s\033[m", name);
+    print_space((13 - name_len) / 2);
+
+    if (exists) {
+        // Get sizes
+        sprintf(key_str, "%u", key);
+        sprintf(port_str, "%u", port);
+        size_t key_len = strlen(key_str), port_len = strlen(port_str);
+
+        // Print key
+        print_space((5 - key_len) / 2 + (5 - key_len) % 2);
+        printf("%s", key_str);
+        print_space((5 - key_len) / 2);
+
+        // Print ipaddr
+        print_space((19 - ipaddr_len) / 2 + (19 - ipaddr_len) % 2);
+        printf("%s", ipaddr);
+        print_space((19 - ipaddr_len) / 2);
+
+        // Print port
+        print_space((10 - port_len) / 2 + (10 - port_len) % 2);
+        printf("%s", port_str);
+        print_space((10 - port_len) / 2);
+    }
+    if (!exists)
+        printf("\x1b[31m N/D         N/D           N/D    \033[m");
+    puts("");
+}
+
 int process_command_show(t_nodeinfo *ni)
 {
-    puts("\x1b[34m[*] Node Status\033[m");
-        
-    // Node info
-    printf("This node info: %u\t%s\t%s\n", ni->key, ni->ipaddr, ni->self_port);
-
-    // Node successor info
-    if (ni->succ_fd == -1)
-        puts("Successor node info: \x1b[31mN/D\033[m");
-    else
-        printf("Successor node info: %u\t%s\t%u\n", ni->succ_id, ni->succ_ip, ni->succ_port);
-
-    // Node predecessor info
-    if (ni->pred_fd == -1)
-        puts("Predecessor node info: \x1b[31mN/D\033[m");
-    else
-        printf("Predecessor node info: %u\t%s\t%u\n", ni->pred_id, ni->pred_ip, ni->pred_port);
-
-    // Shortcut info
-    if (ni->shcut_info == NULL)
-        puts("Shortcut node info: \x1b[31mN/D\033[m");
-    else
-        printf("Shortcut node info:\n* Key: %u\t%s\t%u\n", ni->shcut_id, ni->shcut_ip, ni->shcut_port);
-
+    unsigned int self_port;
+    sscanf(ni->self_port, "%u", &self_port);
+    puts("     Node     Key      IP Address       Port   ");
+    print_info("Predecessor", ni->pred_id, ni->pred_ip, ni->pred_port, ni->pred_fd != -1);
+    print_info("Self", ni->key, ni->ipaddr, self_port, 1);
+    print_info("Successor", ni->succ_id, ni->succ_ip, ni->succ_port, ni->succ_fd != -1);
+    print_info("Shortcut", ni->shcut_id, ni->shcut_ip, ni->shcut_port, ni->shcut_info != NULL);
     return 0;
 }
 
