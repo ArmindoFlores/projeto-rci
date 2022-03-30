@@ -447,27 +447,31 @@ int process_message_temp(t_nodeinfo *ni)
         }
     }
     else if (ni->pred_id == ni->key) {
-        // These are the first two nodes in the ring, and they're still not connected
-        // Let the new node know its predecessor will also be its successor
-        // This skips one step (sending PRED to ourselves)
-        int result;
+        printf("pred_id = %u\t\tsucc_id = %u\t\t self_id = %u\n", ni->pred_id, ni->succ_id, ni->key);
 
-        char portstr[6] = "";
-        snprintf(portstr, sizeof(portstr), "%d", node_port);
+        // Make sure we don't keep re-sending this message to ourselves
+        if (ni->succ_id == ni->key && ni->pred_id == ni->key) {
+            // These are the first two nodes in the ring, and they're still not connected
+            // Let the new node know its predecessor will also be its successor
+            // This skips one step (sending PRED to ourselves)
+            int result;
 
-        // Set the connecting node to also be this node's predecessor
-        result = init_client(node_ip, portstr, ni);
-        if (result != 0) {
-            // Error: couldn't establish connection
-            // This is still recoverable as there is only one node in the ring
-            printf("\x1b[33m[!] Couldn't establish connection to new predecessor\033[m\n");
-            reset_pmt(&buffer_size, &ni->temp_fd);
-            return 0;
-        }
+            char portstr[6] = "";
+            snprintf(portstr, sizeof(portstr), "%d", node_port);
 
-        ni->pred_id = node_i;
+            // Set the connecting node to also be this node's predecessor
+            result = init_client(node_ip, portstr, ni);
+            if (result != 0) {
+                // Error: couldn't establish connection
+                // This is still recoverable as there is only one node in the ring
+                printf("\x1b[33m[!] Couldn't establish connection to new predecessor\033[m\n");
+                reset_pmt(&buffer_size, &ni->temp_fd);
+                return 0;
+            }
+            
+            ni->pred_id = node_i;
 
-        if (ni->pred_id != ni->key) {
+            
             sprintf(message, "SELF %d %s %s\n", ni->key, ni->ipaddr, ni->self_port);
             result = sendall(ni->pred_fd, message, strlen(message));
             if (result < 0) {
