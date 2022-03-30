@@ -9,11 +9,41 @@
 #include <string.h>
 
 int process_command_new(t_nodeinfo *ni) {
+    // Create server
     int result = init_server(ni);
     if (result != 0) {
         puts("\x1b[31m[!] Error creating node\033[m");
+        close_sockets(ni);
         return -1;
     }
+
+    // Connect to self
+    result = init_client(ni->ipaddr, ni->self_port, ni);
+    if (result != 0) {
+        puts("\x1b[31m[!] Error creating node\033[m");
+        close_sockets(ni);
+        return 0;
+    }
+    ni->pred_id = ni->key;
+
+    struct sockaddr addr;
+    socklen_t addrlen = sizeof(addr);
+
+    // Accept our own connection
+    ni->succ_fd = accept(ni->main_fd, &addr, &addrlen);
+    if (ni->succ_fd == -1) {
+        puts("\x1b[31m[!] Error creating node\033[m");
+        close_sockets(ni);
+        return 0;
+    }
+    if (ni->successor == NULL)
+        ni->successor = new_conn_info(2048);
+    else
+        set_conn_info(ni->successor, 2048);
+    ni->succ_id = ni->key;
+    strcpy(ni->succ_ip, ni->ipaddr);
+    sscanf(ni->self_port, "%u", &ni->succ_port);
+
     return 0;
 }
 
@@ -116,20 +146,21 @@ int process_command_show(t_nodeinfo *ni)
 
 int process_command_leave(t_nodeinfo *ni)
 {
-    // Node is the only one on the ring
     if (ni->succ_fd == -1)
-        return 1;
+        return 0;
 
     if (ni->pred_fd != -1)
         close(ni->pred_fd);
     ni->pred_fd = -1;
 
-    char message[64] = "";
-    sprintf(message, "PRED %u %s %u\n", ni->pred_id, ni->pred_ip, ni->pred_port);
-    int result = sendall(ni->succ_fd, message, strlen(message));
-    if (result != 0) {
-        // Error sending
-        return -1;
+    if (ni->succ_id != ni->key) {
+        char message[64] = "";
+        sprintf(message, "PRED %u %s %u\n", ni->pred_id, ni->pred_ip, ni->pred_port);
+        int result = sendall(ni->succ_fd, message, strlen(message));
+        if (result != 0) {
+            // Error sending
+            return -1;
+        }
     }
 
     close(ni->succ_fd);

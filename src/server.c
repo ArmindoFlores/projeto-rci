@@ -250,12 +250,19 @@ int process_message_predecessor(t_nodeinfo *ni)
         return ro.error_code;
     if (ro.read_type == RO_DISCONNECT) {
         // !! Predecessor has disconnected!
-        puts("\x1b[31m[!] Predecessor has disconnected abruptly (ring is broken)\033[m");
-        if (ni->succ_fd == ni->pred_fd) {
-            // This is a two-node network
-            ni->succ_fd = -1;
+        if (ni->pred_id != ni->key) {
+            // This is not a one-node network
+            puts("\x1b[31m[!] Predecessor has disconnected abruptly (ring is broken)\033[m");
+            if (ni->succ_fd == ni->pred_fd) {
+                // This is a two-node network
+                ni->succ_fd = -1;
+            }
+            reset_pmt(&buffer_size, &ni->pred_fd);
         }
-        reset_pmt(&buffer_size, &ni->pred_fd);
+        else {
+            puts("I disconnected");
+            reset_pmt(&buffer_size, &ni->pred_fd);
+        }
         return 0;
     }
 
@@ -418,7 +425,7 @@ int process_message_temp(t_nodeinfo *ni)
     // Message to be sent
     char message[64] = "";
     // Only send PRED message if we have a successor and the node is entering 
-    if (ni->succ_fd != -1 && ring_distance(ni->key, node_i) < ring_distance(ni->key, ni->succ_id)) {
+    if (ni->succ_id != ni->key && ni->succ_fd != -1 && ring_distance(ni->key, node_i) < ring_distance(ni->key, ni->succ_id)) {
         // There are already more than two nodes in this ring
         // Let the current successor know it has a new predecessor
         sprintf(message, "PRED %d %s %d\n", node_i, node_ip, node_port);
@@ -439,7 +446,7 @@ int process_message_temp(t_nodeinfo *ni)
             return -1;
         }
     }
-    else if (ni->pred_fd == -1) {
+    else if (ni->pred_id == ni->key) {
         // These are the first two nodes in the ring, and they're still not connected
         // Let the new node know its predecessor will also be its successor
         // This skips one step (sending PRED to ourselves)
@@ -460,25 +467,27 @@ int process_message_temp(t_nodeinfo *ni)
 
         ni->pred_id = node_i;
 
-        sprintf(message, "SELF %d %s %s\n", ni->key, ni->ipaddr, ni->self_port);
-        result = sendall(ni->pred_fd, message, strlen(message));
-        if (result < 0) {
-            // Temporary connection is over
-            // This isn't a problem and won't break any rings
-            printf("\x1b[33[!] Client (%s:%d) disconnected before joining the ring\033[m\n", node_ip, node_port);
-            if (ni->pred_fd >= 0)
-                close(ni->pred_fd);
-            ni->pred_fd = -1;
-            reset_pmt(&buffer_size, &ni->temp_fd);
-            return 0;
-        }
-        else if (result > 0) {
-            // An error occurred
-            if (ni->pred_fd >= 0)
-                close(ni->pred_fd);
-            ni->pred_fd = -1;
-            reset_pmt(&buffer_size, &ni->temp_fd);
-            return -1;
+        if (ni->pred_id != ni->key) {
+            sprintf(message, "SELF %d %s %s\n", ni->key, ni->ipaddr, ni->self_port);
+            result = sendall(ni->pred_fd, message, strlen(message));
+            if (result < 0) {
+                // Temporary connection is over
+                // This isn't a problem and won't break any rings
+                printf("\x1b[33[!] Client (%s:%d) disconnected before joining the ring\033[m\n", node_ip, node_port);
+                if (ni->pred_fd >= 0)
+                    close(ni->pred_fd);
+                ni->pred_fd = -1;
+                reset_pmt(&buffer_size, &ni->temp_fd);
+                return 0;
+            }
+            else if (result > 0) {
+                // An error occurred
+                if (ni->pred_fd >= 0)
+                    close(ni->pred_fd);
+                ni->pred_fd = -1;
+                reset_pmt(&buffer_size, &ni->temp_fd);
+                return -1;
+            }
         }
     }
     else {
