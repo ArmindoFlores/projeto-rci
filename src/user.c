@@ -93,6 +93,7 @@ int process_command_leave(t_nodeinfo *ni)
 
     if (ni->pred_fd != -1)
         close(ni->pred_fd);
+    ni->pred_fd = -1;
 
     char message[64] = "";
     sprintf(message, "PRED %u %s %u\n", ni->pred_id, ni->pred_ip, ni->pred_port);
@@ -101,7 +102,11 @@ int process_command_leave(t_nodeinfo *ni)
         // Error sending
         return -1;
     }
-    return 1;
+
+    close(ni->succ_fd);
+    ni->succ_fd = -1;
+
+    return 0;
 }
 
 int process_command_find(unsigned int key, t_nodeinfo *ni)
