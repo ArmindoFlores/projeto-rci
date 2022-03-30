@@ -447,8 +447,6 @@ int process_message_temp(t_nodeinfo *ni)
         }
     }
     else if (ni->pred_id == ni->key) {
-        printf("pred_id = %u\t\tsucc_id = %u\t\t self_id = %u\n", ni->pred_id, ni->succ_id, ni->key);
-
         // Make sure we don't keep re-sending this message to ourselves
         if (ni->succ_id == ni->key && ni->pred_id == ni->key) {
             // These are the first two nodes in the ring, and they're still not connected
