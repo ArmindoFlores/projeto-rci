@@ -103,11 +103,9 @@ int main(int argc, char *argv[])
         // First of all, check for lost UDP messages
         check_for_lost_udp_messages(ni);
 
+        // Clear user prompt
         if (e != E_MESSAGE_USER && e != E_TIMEOUT)
             printf("\x08\x08\x08\x08");
-
-        if (e != E_TIMEOUT)
-            printf("[*] Got new event '%s'\n", get_event_string(e));
 
         int result = 0;
         // Act based on what event just occurred

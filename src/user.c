@@ -128,7 +128,7 @@ int process_command_exit(t_nodeinfo *ni)
 
 int process_command_find(unsigned int key, t_nodeinfo *ni)
 {
-    if (ni->succ_id && ring_distance(ni->key, key) < ring_distance(ni->key, ni->succ_id)) {
+    if ((ni->succ_fd == -1 && ni->pred_fd == -1) || (ni->succ_id && ring_distance(ni->key, key) < ring_distance(ni->key, ni->succ_id))) {
         printf("Key %u belongs to node %u (%s:%s)\n", key, ni->key, ni->ipaddr, ni->self_port);
         return 0;
     }
@@ -150,6 +150,34 @@ int process_command_find(unsigned int key, t_nodeinfo *ni)
     return 0;
 }
 
+int process_command_chord(unsigned int key, char *ipaddr, unsigned int port, t_nodeinfo *ni)
+{    
+    if (ni->shcut_info != NULL)
+        freeaddrinfo(ni->shcut_info);
+    if (generate_udp_addrinfo(ipaddr, port, &ni->shcut_info) != 0) {
+        ni->shcut_info = NULL;
+        puts("Couldn't create chord");
+        return 0;
+    }
+    ni->shcut_id = key;
+    strcpy(ni->shcut_ip, ipaddr);
+    ni->shcut_port = port;
+    puts("Successfully created chord");
+    return 0;
+}
+
+int process_command_echord(t_nodeinfo *ni)
+{    
+    if (ni->shcut_info != NULL) {
+        puts("Deleted existing shortcut");
+        freeaddrinfo(ni->shcut_info);
+    }
+    else
+        puts("No shortcut to delete");
+    ni->shcut_info = NULL;
+    return 0;
+}
+
 int process_user_message(t_nodeinfo *ni)
 {
     char buffer[128] = "";
@@ -158,7 +186,7 @@ int process_user_message(t_nodeinfo *ni)
         puts("\x1b[31m[!] Error calling fgets()\033[m");
         return -1;
     }
-    if (strcmp(buffer, "new\n") == 0) {
+    if (strcmp(buffer, "new\n") == 0 || strcmp(buffer, "n\n") == 0) {
         if (ni->main_fd != -1) {
             // Server is already running
             puts("Node already in a ring");
@@ -169,7 +197,11 @@ int process_user_message(t_nodeinfo *ni)
         puts("\x1b[32m[*] Created new ring\033[m");
         return 0;
     }
-    if (strncmp(buffer, "pentry", 6) == 0) {
+    if (strcmp(buffer, "bentry\n") == 0 || strcmp(buffer, "b\n") == 0) {
+        puts("Not implemented!");
+        return 0;
+    }
+    if (strncmp(buffer, "pentry", 6) == 0 || strncmp(buffer, "p ", 2) == 0 || strncmp(buffer, "p\n", 2) == 0) {
         if (ni->main_fd != -1) {
             // Server is already running
             puts("Node already in a ring");
@@ -177,42 +209,50 @@ int process_user_message(t_nodeinfo *ni)
         }
         int pred, port;
         char ipaddr[INET_ADDRSTRLEN] = "";
-        if (sscanf(buffer+6, " %u %15s %u\n", &pred, ipaddr, &port) == 3) {
+        char *start_pos = strchr(buffer, ' ');
+        if (start_pos && sscanf(start_pos+1, "%u %15s %u\n", &pred, ipaddr, &port) == 3) {
             ipaddr[15] = '\0';            
             return process_command_pentry(pred, port, ipaddr, ni);
         }
         else {
-            puts("Invalid format. Usage: pentry pred pred.IP pred.port");
+            puts("Invalid format.\nUsage: \x1b[4mp\033[mentry pred pred.IP pred.port");
         }
+        return 0;
     }
-    if (strcmp(buffer, "show\n") == 0) {
+    if (strcmp(buffer, "show\n") == 0 || strcmp(buffer, "s\n") == 0) {
         return process_command_show(ni);
     }    
-    if (strcmp(buffer, "leave\n") == 0) {
+    if (strcmp(buffer, "leave\n") == 0 || strcmp(buffer, "l\n") == 0) {
         if (ni->main_fd == -1) {
             puts("Node is not a member of any ring");
         }
         return process_command_leave(ni);
     }
-    if (strcmp(buffer, "exit\n") == 0) {
+    if (strcmp(buffer, "exit\n") == 0 || strcmp(buffer, "ex\n") == 0) {
         return process_command_exit(ni);
     }
-    if (strncmp(buffer, "find ", 5) == 0) {
+    if (strncmp(buffer, "find", 4) == 0 || strncmp(buffer, "f ", 2) == 0 || strncmp(buffer, "f\n", 2) == 0) {
         unsigned int key;
-        if (sscanf(buffer+5, "%u", &key) != 1) {
-            puts("Invalid format. Usage: find k");
+        char *start_pos = strchr(buffer, ' ');
+        if (!start_pos || sscanf(start_pos+1, "%u", &key) != 1) {
+            puts("Invalid format.\nUsage: \x1b[4mf\033[mind k");
             return 0;
         }
         if (key > 31) {
             puts("Invalid key (maximum is 31)");
             return 0;
         }
+        if (ni->main_fd == -1) {
+            puts("Node is not in a ring");
+            return 0;
+        }
         return process_command_find(key, ni);
     }
-    if (strncmp(buffer, "chord ", 6) == 0) {
+    if (strncmp(buffer, "chord", 5) == 0 || strncmp(buffer, "c ", 2) == 0 || strncmp(buffer, "c\n", 2) == 0) {
         unsigned int shcut_id, shcut_port;
         char shcut_ipaddr[INET_ADDRSTRLEN] = "";
-        if (sscanf(buffer+6, "%u %15s %u", &shcut_id, shcut_ipaddr, &shcut_port) == 3) {   
+        char *start_pos = strchr(buffer, ' ');
+        if (start_pos && sscanf(start_pos+1, "%u %15s %u", &shcut_id, shcut_ipaddr, &shcut_port) == 3) {   
             if (shcut_id > 31 || shcut_id < 0) {
                 printf("Invalid shortcut node '%d'\n", shcut_id);
                 return 0;
@@ -224,22 +264,36 @@ int process_user_message(t_nodeinfo *ni)
             if (shcut_port > 65535 || shcut_port < 0) {
                 printf("Invalid port number '%d'\n", shcut_port);
                 return 0;
-            }    
-            if (ni->shcut_info != NULL)
-                freeaddrinfo(ni->shcut_info);
-            if (generate_udp_addrinfo(shcut_ipaddr, shcut_port, &ni->shcut_info) != 0) {
-                ni->shcut_info = NULL;
-                puts("[!] Couldn't create chord!");
-                return 0;
             }
-            ni->shcut_id = shcut_id;
-            strcpy(ni->shcut_ip, shcut_ipaddr);
-            ni->shcut_port = shcut_port;
-            puts("\x1b[32m[*] Success!\033[m");
         }
         else {
-            puts("Invalid format. Usage: chord i i.IP i.port");
+            puts("Invalid format.\nUsage: \x1b[4mc\033[mhord i i.IP i.port");
+            return 0;
         }
+        return process_command_chord(shcut_id, shcut_ipaddr, shcut_port, ni);
     }
+    if (strcmp(buffer, "echord\n") == 0 || strcmp(buffer, "ec\n") == 0) {
+        return process_command_echord(ni);
+    }
+    if (strncmp(buffer, "e", 1) == 0) {
+        puts("Ambiguous command. Did you mean:");
+        puts("\t\x1b[4mex\033[mit");
+        puts("\t\x1b[4mec\033[mhord");
+        return 0;
+    }
+    size_t buffer_l = strlen(buffer);
+    if (buffer_l > 0)
+        buffer[buffer_l-1] = '\0';
+    printf("Invalid command \"%s\".\nAvailable commands:\n", buffer);
+    puts("");
+    puts("\t\x1b[4mb\033[mentry \x1b[3mboot boot.IP boot.port\033[m -> join \x1b[3mboot\033[m's ring");
+    puts("\t\x1b[4mc\033[mhord \x1b[3mi i.IP i.port\033[m           -> create a shortcut to \x1b[3mi\033[m");
+    puts("\t\x1b[4mec\033[mhord                        -> delete current shortcut");
+    puts("\t\x1b[4mex\033[mit                          -> exit application");
+    puts("\t\x1b[4mf\033[mind \x1b[3mk\033[m                        -> find the the owner of key/object \x1b[3mk\033[m");
+    puts("\t\x1b[4ml\033[meave                         -> leave the ring");
+    puts("\t\x1b[4mn\033[mew                           -> create new ring");
+    puts("\t\x1b[4mp\033[mentry \x1b[3mpred pred.IP pred.port\033[m -> join a ring and set \x1b[3mpred\033[m as predecessor");
+    puts("\t\x1b[4ms\033[mhow                          -> show current node state");
     return 0;
 }
