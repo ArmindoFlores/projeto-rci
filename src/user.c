@@ -105,8 +105,25 @@ int process_command_leave(t_nodeinfo *ni)
 
     close(ni->succ_fd);
     ni->succ_fd = -1;
+    
+    close(ni->main_fd);
+    ni->main_fd = -1;
+
+    close(ni->udp_fd);
+    ni->udp_fd = -1;
 
     return 0;
+}
+
+int process_command_exit(t_nodeinfo *ni)
+{
+    if (ni->main_fd == -1)
+        return 1;
+
+    int result = process_command_leave(ni);
+    if (result != 0)
+        return result;
+    return 1;
 }
 
 int process_command_find(unsigned int key, t_nodeinfo *ni)
@@ -176,6 +193,9 @@ int process_user_message(t_nodeinfo *ni)
             puts("Node is not a member of any ring");
         }
         return process_command_leave(ni);
+    }
+    if (strcmp(buffer, "exit\n") == 0) {
+        return process_command_exit(ni);
     }
     if (strncmp(buffer, "find ", 5) == 0) {
         unsigned int key;
