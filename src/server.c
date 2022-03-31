@@ -115,6 +115,13 @@ void process_found_key(unsigned int search_key, unsigned int n, char *ipaddr, un
     else {
         drop_request(n, ni);
         printf("Key %u belongs to node %u (%s:%u)\n", request_key, search_key, ipaddr, port);
+        // FIXME: check if this message was sent by the user/node
+        if (1) {
+            char message[64] = "";
+            sprintf(message, "EPRED %u %s %u", search_key, ipaddr, port);
+            // FIXME: NULL should be the node that requested
+            if (udpsend(ni->udp_fd, message, strlen(message), NULL));
+        }
     }
 }
 
@@ -542,9 +549,12 @@ int process_message_udp(t_nodeinfo *ni)
             // We successfully sent a FND/RSP message through a chord
             ni->waiting_for_chord_ack = 0;
         }
+        else if (ni->waiting_for_entering_node_ack && ni->entering_node_info && cmp_addr(ni->entering_node_info->ai_addr, sender.ai_addr)) {
+            // We successfully sent a EFND message
+            ni->waiting_for_entering_node_ack = 0;
+        }
         else {
             // Random ACK message??
-            // FIXME: Could be from a node trying to connect
             puts("\x1b[33[!] Received an unprompted \"ACK\" message");
         }
         return 0;
@@ -593,6 +603,49 @@ int process_message_udp(t_nodeinfo *ni)
 
             return 0;
         }
+    }
+    else if (strncmp(buffer, "EFND ", 5) == 0) {
+        unsigned int key;
+        if ((sscanf(buffer+5, "%u", &key) != 1) || key > 31) {
+            // Malformatted message
+            puts("\x1b[33[!] Received malformatted EFND message\033[m");
+            return 0;
+        }
+
+        if (udpsend(ni->udp_fd, "ACK", 3, &sender) != 0) {
+            puts("\x1b[33[!] Error responding to EFND message\033[m");
+            return 0;
+        }
+        if ((ni->succ_id == ni->key && ni->pred_id == ni->key) || (ni->succ_id && ring_distance(ni->key, key) < ring_distance(ni->key, ni->succ_id))) {
+            printf("Key %u belongs to node %u (%s:%s)\n", key, ni->key, ni->ipaddr, ni->self_port);
+            return 0;
+        }
+
+        if (register_request(ni->n, key, ni) < 0) {
+            puts("Find request queue is full, try again later");
+            return 0;
+        }
+
+        char message[64] = "";
+        sprintf(message, "FND %u %u %u %s %s\n", key, ni->n, ni->key, ni->ipaddr, ni->self_port);
+        
+        int result = send_to_closest(message, key, ni);
+        if (result < 0)
+            return 0;
+
+        ni->n++;
+        ni->n %= 100;
+        return 0;
+    }
+    else if (strncmp(buffer, "EPRED ", 6) == 0) {
+        unsigned int key, port;
+        char ipaddr[INET_ADDRSTRLEN] = "";
+        t_msginfotype mi = get_self_or_pred_message_info(buffer+1, &key, ipaddr, &port);
+        if (mi != MI_SUCCESS) {
+            puts("\x1b[33[!] Received malformatted EPRED message\033[m");
+            return 0;
+        }
+        return process_command_pentry(key, ipaddr, port, ni);
     }
 
     printf("\x1b[33[!] Received invalid UDP message: '%s'\033[m\n", buffer);

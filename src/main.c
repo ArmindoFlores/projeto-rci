@@ -147,7 +147,6 @@ int main(int argc, char *argv[])
         }
         if (result > 0)
             break;
-
                     
         if (e != E_TIMEOUT) {
             printf(">>> ");

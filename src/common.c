@@ -102,6 +102,9 @@ t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port)
     ni->shcut_info = NULL;
     ni->waiting_for_chord_ack = 0;
     ni->req_start = 0;
+    ni->entering_node_info = NULL;
+    ni->waiting_for_entering_node_ack = 0;
+    ni->entering_node_req_start = 0;
     return ni;
 }
 

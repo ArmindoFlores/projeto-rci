@@ -87,6 +87,43 @@ int process_command_pentry(int pred, int port, char *ipaddr, t_nodeinfo *ni)
     return 0;
 }
 
+int process_command_bentry(int boot, int port, char *ipaddr, t_nodeinfo *ni)
+{
+    if (boot > 31 || boot < 0) {
+        printf("Invalid boot node '%d'\n", boot);
+        return 0;
+    }
+    if (!isipaddr(ipaddr)) {
+        printf("Invalid IP address '%s'\n", ipaddr);
+        return 0;
+    }
+    if (port > 65535 || port < 0) {
+        printf("Invalid port number '%d'\n", port);
+        return 0;
+    }
+
+    int result = init_server(ni);
+    if (result != 0) {
+        puts("\x1b[31m[!] Error creating node\033[m");
+        return -1;
+    }
+
+    struct addrinfo *res;
+    if (generate_udp_addrinfo(ipaddr, port, &res) != 0) {
+        puts("\x1b[31m[!] Error generating information\033[m");
+        return -1;
+    }
+
+    char message[64] = "";
+    sprintf(message, "EFND %u", ni->key);
+    if (udpsend(ni->udp_fd, message, strlen(message), res) != 0) {
+        puts("\x1b[31m[!] Error sending EFND message\033[m");
+        close_sockets(ni);
+    }
+    freeaddrinfo(res);
+    return 0;
+}
+
 void print_space(unsigned int n)
 {
     for (unsigned int i = 0; i < n; i++)
@@ -257,8 +294,22 @@ int process_user_message(t_nodeinfo *ni)
         puts("\x1b[32m[*] Created new ring\033[m");
         return 0;
     }
-    if (strcmp(buffer, "bentry\n") == 0 || strcmp(buffer, "b\n") == 0) {
-        puts("Not implemented!");
+    if (strncmp(buffer, "bentry", 6) == 0 || strncmp(buffer, "b ", 2) == 0 || strncmp(buffer, "b\n", 2) == 0) {
+        if (ni->main_fd != -1) {
+            // Server is already running
+            puts("Node already in a ring");
+            return 0;
+        }
+        int boot, port;
+        char ipaddr[INET_ADDRSTRLEN] = "";
+        char *start_pos = strchr(buffer, ' ');
+        if (start_pos && sscanf(start_pos+1, "%u %15s %u\n", &boot, ipaddr, &port) == 3) {
+            ipaddr[15] = '\0';            
+            return process_command_bentry(boot, port, ipaddr, ni);
+        }
+        else {
+            puts("Invalid format.\nUsage: \x1b[4mb\033[mentry boot boot.IP boot.port");
+        }
         return 0;
     }
     if (strncmp(buffer, "pentry", 6) == 0 || strncmp(buffer, "p ", 2) == 0 || strncmp(buffer, "p\n", 2) == 0) {

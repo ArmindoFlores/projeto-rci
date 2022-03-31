@@ -59,12 +59,18 @@ typedef struct nodeinfo {
     unsigned int shcut_port;
     // Shortcut network information
     struct addrinfo *shcut_info;
-    // Whether the node is waiting for its chord do acknowledge a message
+    // Whether the node is waiting for its chord to acknowledge a message
     int waiting_for_chord_ack;
-    // When the UDP message was sent
+    // When the UDP message was sent to the chord
     clock_t req_start;
     // The type of message that's been waited for
     char ongoing_udp_message[64];
+    // Entering node network information
+    struct addrinfo *entering_node_info;
+    // Whether the node is waiting for an entering node to acknowledge a message
+    int waiting_for_entering_node_ack;
+    // When the UDP message was sent by entering node
+    clock_t entering_node_req_start;
 } t_nodeinfo;
 
 enum type {
