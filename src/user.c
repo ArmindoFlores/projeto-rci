@@ -9,42 +9,7 @@
 #include <string.h>
 
 int process_command_new(t_nodeinfo *ni) {
-    // Create server
-    int result = init_server(ni);
-    if (result != 0) {
-        puts("\x1b[31m[!] Error creating node\033[m");
-        close_sockets(ni);
-        return -1;
-    }
-
-    // Connect to self
-    result = init_client(ni->ipaddr, ni->self_port, ni);
-    if (result != 0) {
-        puts("\x1b[31m[!] Error creating node\033[m");
-        close_sockets(ni);
-        return 0;
-    }
-    ni->pred_id = ni->key;
-
-    struct sockaddr addr;
-    socklen_t addrlen = sizeof(addr);
-
-    // Accept our own connection
-    ni->succ_fd = accept(ni->main_fd, &addr, &addrlen);
-    if (ni->succ_fd == -1) {
-        puts("\x1b[31m[!] Error creating node\033[m");
-        close_sockets(ni);
-        return 0;
-    }
-    if (ni->successor == NULL)
-        ni->successor = new_conn_info(2048);
-    else
-        set_conn_info(ni->successor, 2048);
-    ni->succ_id = ni->key;
-    strcpy(ni->succ_ip, ni->ipaddr);
-    sscanf(ni->self_port, "%u", &ni->succ_port);
-
-    return 0;
+    return create_ring(ni);
 }
 
 int process_command_pentry(int pred, int port, char *ipaddr, t_nodeinfo *ni)
@@ -68,23 +33,7 @@ int process_command_pentry(int pred, int port, char *ipaddr, t_nodeinfo *ni)
         return -1;
     }
 
-    char portstr[6] = "";
-    snprintf(portstr, sizeof(portstr), "%d", port);
-    result = init_client(ipaddr, portstr, ni);
-
-    if (result == -1)
-        return -1;
-
-    char message[64] = "";
-    sprintf(message, "SELF %d %s %s\n", ni->key, ni->ipaddr, ni->self_port);
-    if (sendall(ni->pred_fd, message, strlen(message)) != 0) {
-        puts("\x1b[31m[!] Error sending message to predecessor\033[m");
-        return -1;
-    }
-
-    ni->pred_id = pred;
-    
-    return 0;
+    return join_ring(pred, ipaddr, port, ni);
 }
 
 int process_command_bentry(int boot, int port, char *ipaddr, t_nodeinfo *ni)

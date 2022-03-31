@@ -79,7 +79,7 @@ int send_to_closest(char *message, unsigned int key, t_nodeinfo *ni)
 {
     unsigned int distance_succ = ring_distance(ni->succ_id, key);
     unsigned int distance_shcut = ni->shcut_info != NULL ? ring_distance(ni->shcut_id, key) : UINT_MAX;
-    if (distance_shcut < distance_succ && !ni->waiting_for_chord_ack) {
+    if (distance_shcut < distance_succ && !find_udp_message_from(ni, ni->shcut_info->ai_addr)) {
         // Search key is closer to shortcut than to successor
         puts("Trying to send message through shortcut");
         int result = udpsend(ni->udp_fd, message, strlen(message)-1, ni->shcut_info);
@@ -88,10 +88,7 @@ int send_to_closest(char *message, unsigned int key, t_nodeinfo *ni)
             puts("\x1b[31m[!] Couldn't resend the message\033[m");
             return -1;
         }
-        ni->waiting_for_chord_ack = 1;
-        ni->req_start = clock();
-        strcpy(ni->ongoing_udp_message, message); 
-        return 0;
+        return register_udp_message(ni, message, strlen(message)-1, ni->shcut_info->ai_addr, ni->shcut_info->ai_addrlen, UDPMSG_CHORD);
     }
     else {
         // Forward the message to successor
@@ -116,7 +113,7 @@ void process_found_key(unsigned int search_key, unsigned int n, char *ipaddr, un
         drop_request(n, ni);
         printf("Key %u belongs to node %u (%s:%u)\n", request_key, search_key, ipaddr, port);
         // FIXME: check if this message was sent by the user/node
-        if (1) {
+        if (0) {
             char message[64] = "";
             sprintf(message, "EPRED %u %s %u", search_key, ipaddr, port);
             // FIXME: NULL should be the node that requested
@@ -288,7 +285,7 @@ int process_message_predecessor(t_nodeinfo *ni)
             return 0;
         }
 
-        printf("\x1b[32m[*] Received PRED message from %s:%d, setting node %d (%s:%d) as predecessor\033[m\n", ni->pred_ip, ni->pred_port, node_i, node_ip, node_port);
+        printf("\x1b[32m[*] Received \"PRED\" message from %s:%d, setting node %d (%s:%d) as predecessor\033[m\n", ni->pred_ip, ni->pred_port, node_i, node_ip, node_port);
 
         char portstr[6] = "";
         snprintf(portstr, sizeof(portstr), "%d", node_port);
@@ -426,7 +423,7 @@ int process_message_temp(t_nodeinfo *ni)
         return 0;
     }
 
-    printf("\x1b[32m[*] Received SELF message, setting node %d (%s:%d) as successor\033[m\n", node_i, node_ip, node_port);
+    printf("\x1b[32m[*] Received \"SELF\" message, setting node %d (%s:%d) as successor\033[m\n", node_i, node_ip, node_port);
     buffer_size = 0;
 
     // Message to be sent
@@ -521,13 +518,6 @@ int process_message_temp(t_nodeinfo *ni)
     return 0;
 }
 
-int cmp_addr(struct sockaddr *a1, struct sockaddr *a2)
-{
-    struct sockaddr_in *addr1 = (struct sockaddr_in*) a1, *addr2 = (struct sockaddr_in*) a2;
-    return addr1->sin_addr.s_addr == addr2->sin_addr.s_addr
-        && addr1->sin_port == addr2->sin_port;
-}
-
 int process_message_udp(t_nodeinfo *ni)
 {
     struct addrinfo sender;
@@ -545,18 +535,13 @@ int process_message_udp(t_nodeinfo *ni)
     buffer[recvd_bytes] = '\0';
 
     if (strcmp(buffer, "ACK") == 0) {
-        if (ni->waiting_for_chord_ack && ni->shcut_info && cmp_addr(ni->shcut_info->ai_addr, sender.ai_addr)) {
-            // We successfully sent a FND/RSP message through a chord
-            ni->waiting_for_chord_ack = 0;
-        }
-        else if (ni->waiting_for_entering_node_ack && ni->entering_node_info && cmp_addr(ni->entering_node_info->ai_addr, sender.ai_addr)) {
-            // We successfully sent a EFND message
-            ni->waiting_for_entering_node_ack = 0;
-        }
-        else {
+        t_ongoing_udp_message *msg = pop_udp_message_from(ni, sender.ai_addr);
+        if (msg == NULL) {
             // Random ACK message??
             puts("\x1b[33[!] Received an unprompted \"ACK\" message");
         }
+        // Received an ACK and so removed message from list
+        free_udp_message_list(msg);
         return 0;
     }
     else if (strncmp(buffer, "FND ", 4) == 0) {
@@ -565,7 +550,7 @@ int process_message_udp(t_nodeinfo *ni)
         
         t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
         if (mi == MI_SUCCESS) {
-            puts("\x1b[32m[*] Received 'FND' message, responding\033[m");
+            puts("\x1b[32m[*] Received \"FND\" message, responding\033[m");
             udpsend(ni->udp_fd, "ACK", 3, &sender);
 
             unsigned int distance_self = ring_distance(ni->key, search_key);
@@ -591,7 +576,7 @@ int process_message_udp(t_nodeinfo *ni)
         
         t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
         if (mi == MI_SUCCESS) {
-            puts("\x1b[32m[*] Received 'RSP' message, responding\033[m");
+            puts("\x1b[32m[*] Received \"RSP\" message, responding\033[m");
             udpsend(ni->udp_fd, "ACK", 3, &sender);
 
             if (key == ni->key)
@@ -608,12 +593,12 @@ int process_message_udp(t_nodeinfo *ni)
         unsigned int key;
         if ((sscanf(buffer+5, "%u", &key) != 1) || key > 31) {
             // Malformatted message
-            puts("\x1b[33[!] Received malformatted EFND message\033[m");
+            puts("\x1b[33[!] Received malformatted \"EFND\" message\033[m");
             return 0;
         }
 
         if (udpsend(ni->udp_fd, "ACK", 3, &sender) != 0) {
-            puts("\x1b[33[!] Error responding to EFND message\033[m");
+            puts("\x1b[33[!] Error responding to \"EFND\" message\033[m");
             return 0;
         }
         if ((ni->succ_id == ni->key && ni->pred_id == ni->key) || (ni->succ_id && ring_distance(ni->key, key) < ring_distance(ni->key, ni->succ_id))) {
@@ -642,10 +627,10 @@ int process_message_udp(t_nodeinfo *ni)
         char ipaddr[INET_ADDRSTRLEN] = "";
         t_msginfotype mi = get_self_or_pred_message_info(buffer+1, &key, ipaddr, &port);
         if (mi != MI_SUCCESS) {
-            puts("\x1b[33[!] Received malformatted EPRED message\033[m");
+            puts("\x1b[33[!] Received malformatted \"EPRED\" message\033[m");
             return 0;
         }
-        return process_command_pentry(key, ipaddr, port, ni);
+        return join_ring(key, ipaddr, port, ni);
     }
 
     printf("\x1b[33[!] Received invalid UDP message: '%s'\033[m\n", buffer);

@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <sys/time.h>
 #include "user.h"
 #include "utils.h"
 #include "client.h"
@@ -34,22 +35,56 @@ void usage(char *name) {
 
 void check_for_lost_udp_messages(t_nodeinfo *ni)
 {
-    if (ni->waiting_for_chord_ack) {
-        clock_t now = clock();
-        double time_taken = ((double) (now - ni->req_start)) / CLOCKS_PER_SEC;
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    for (t_ongoing_udp_message *aux = ni->udp_message_list, *prev = NULL; aux != NULL; prev = aux, aux = aux->next) {
+        double time_taken = now.tv_sec - aux->timestamp.tv_sec + 1e-6 * (now.tv_usec - aux->timestamp.tv_usec);
         if (time_taken > 0.005) {
             // Timeout
-            puts("Found timed out UDP message, sending through TCP");
-            ni->waiting_for_chord_ack = 0;
-            int result = sendall(ni->succ_fd, ni->ongoing_udp_message, strlen(ni->ongoing_udp_message));
-            if (result < 0) {
-                close(ni->succ_fd);
-                ni->succ_fd = -1;
+            if (aux->nretries) {
+                aux->nretries--;
+                // Resend
+                // We can ignore the result of udpsend() since aux->nretries will eventually reach 0 
+                printf("\x1b[33m[*] Retrying to send message after %.3fms (%lu attempt(s) remaining)\033[m\n", time_taken * 1000, aux->nretries);
+                struct addrinfo sender;
+                sender.ai_addr = &aux->recipient;
+                sender.ai_addrlen = aux->recipient_size;
+                gettimeofday(&aux->timestamp, NULL);
+                udpsend(ni->udp_fd, aux->body, aux->length, &sender);
             }
-            else if (result > 0) {
-                // An error occurred
-                close(ni->succ_fd);
-                ni->succ_fd = -1;
+            else {
+                // Expire
+                if (prev != NULL)
+                    prev->next = aux->next;
+                aux->next = NULL;
+
+                if (aux->type == UDPMSG_CHORD) {
+                    // Send message through successor instead
+                    puts("\x1b[33m[!] Failed to send UDP message through chord, trying the successor\033[m");
+                    aux->body[aux->length] = '\n';
+                    int result = sendall(ni->succ_fd, aux->body, aux->length+1);
+                    if (result < 0) {
+                        close(ni->succ_fd);
+                        ni->succ_fd = -1;
+                    }
+                    else if (result > 0) {
+                        // An error occurred
+                        close(ni->succ_fd);
+                        ni->succ_fd = -1;
+                    }
+                }
+                else {
+                    // Nothing to do, drop the message
+                    puts("\x1b[33m[!] Failed to send UDP message to new node\033[m");
+                }
+
+                t_ongoing_udp_message *temp = aux;
+                aux = prev;
+                free_udp_message_list(temp);
+                if (aux == NULL) {
+                    ni->udp_message_list = NULL;
+                    break;
+                }
             }
         }
     }
@@ -94,18 +129,16 @@ int main(int argc, char *argv[])
     printf(">>> ");
     fflush(stdout);
     while (1) {
-        // printf("[*] Waiting for events...\n");
-
         // This calls select() and may block
         // Returns after an event happens
         t_event e = select_event(ni);
 
-        // First of all, check for lost UDP messages
-        check_for_lost_udp_messages(ni);
-
         // Clear user prompt
         if (e != E_MESSAGE_USER && e != E_TIMEOUT)
             printf("\x08\x08\x08\x08");
+
+        // First of all, check for lost UDP messages
+        check_for_lost_udp_messages(ni);
 
         int result = 0;
         // Act based on what event just occurred

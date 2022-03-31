@@ -1,11 +1,13 @@
 #define _POSIX_C_SOURCE 200112L
 #include "common.h"
+#include "utils.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdio.h>
 #include <netdb.h>
 #include <errno.h>
 #include <unistd.h>
+#include <sys/time.h>
 #define MAX(x, y) (x > y ? x : y)
 
 struct conn_info {
@@ -89,7 +91,6 @@ t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port)
     memset(ni->pred_ip, 0, sizeof(ni->pred_ip));
     memset(ni->succ_ip, 0, sizeof(ni->succ_ip));
     memset(ni->shcut_ip, 0, sizeof(ni->shcut_ip));
-    memset(ni->ongoing_udp_message, 0, sizeof(ni->ongoing_udp_message));
     ni->pred_port = 0;
     ni->succ_port = 0;
     ni->shcut_port = 0;
@@ -100,11 +101,7 @@ t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port)
     for (size_t i = 0; i < sizeof(ni->requests) / sizeof(int); i++)
         ni->requests[i] = -1;
     ni->shcut_info = NULL;
-    ni->waiting_for_chord_ack = 0;
-    ni->req_start = 0;
-    ni->entering_node_info = NULL;
-    ni->waiting_for_entering_node_ack = 0;
-    ni->entering_node_req_start = 0;
+    ni->udp_message_list = NULL;
     return ni;
 }
 
@@ -141,6 +138,58 @@ int maxfd(t_nodeinfo *si)
     return mx;
 }
 
+int register_udp_message(t_nodeinfo *ni, char *message, size_t size, struct sockaddr *recipient, socklen_t recipient_size, t_udp_message_type msgtype)
+{
+    t_ongoing_udp_message *aux = NULL;
+    for (aux = ni->udp_message_list; aux != NULL; aux = aux->next) {
+        if (cmp_addr(&aux->recipient, recipient)) {
+            // There is already an ongoing message to this recipient
+            return -1;
+        }
+    }
+    if (aux == NULL) {
+        ni->udp_message_list = (t_ongoing_udp_message*) malloc(sizeof(t_ongoing_udp_message));
+        aux = ni->udp_message_list;
+    }
+    else {
+        aux->next = (t_ongoing_udp_message*) malloc(sizeof(t_ongoing_udp_message));
+        aux = aux->next;
+    }
+    gettimeofday(&aux->timestamp, NULL);
+    aux->nretries = 3;
+    memcpy(aux->body, message, size);
+    aux->length = size;
+    memcpy(&aux->recipient, recipient, sizeof(aux->recipient));
+    aux->recipient_size = recipient_size;
+    aux->type = msgtype;
+    aux->next = NULL;
+    return 0;
+}
+
+t_ongoing_udp_message *pop_udp_message_from(t_nodeinfo *ni, struct sockaddr *recipient)
+{
+    for (t_ongoing_udp_message *aux = ni->udp_message_list, *prev = NULL; aux != NULL; prev = aux, aux = aux->next) {
+        if (cmp_addr(&aux->recipient, recipient)) {
+            if (prev != NULL)
+                prev->next = aux->next;
+            else 
+                ni->udp_message_list = NULL;
+            aux->next = NULL;
+            return aux;
+        }
+    }
+    return NULL;
+}
+
+t_ongoing_udp_message *find_udp_message_from(t_nodeinfo *ni, struct sockaddr *recipient)
+{
+    for (t_ongoing_udp_message *aux = ni->udp_message_list; aux != NULL; aux = aux->next) {
+        if (cmp_addr(&aux->recipient, recipient))
+            return aux;
+    }
+    return NULL;
+}
+
 void free_nodeinfo(t_nodeinfo *ni)
 {
     if (ni) {
@@ -149,6 +198,7 @@ void free_nodeinfo(t_nodeinfo *ni)
         free_conn_info(ni->temp);
         if (ni->shcut_info != NULL)
             freeaddrinfo(ni->shcut_info);
+        free_udp_message_list(ni->udp_message_list);
         free(ni);
     }
 }
@@ -259,4 +309,9 @@ void close_sockets(t_nodeinfo *ni)
         close(ni->temp_fd);
     if (ni->udp_fd >= 0)
         close(ni->udp_fd);
+}
+
+void free_udp_message_list(t_ongoing_udp_message *oum)
+{
+    free(oum);
 }

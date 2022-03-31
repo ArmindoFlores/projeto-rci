@@ -5,12 +5,28 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <time.h>
+#include <sys/time.h>
 
 /**
  * @brief An object that holds information about a network connection
  * 
  */
 typedef struct conn_info t_conn_info;
+
+typedef enum {
+    UDPMSG_CHORD,
+    UDPMSG_ENTERING
+} t_udp_message_type;
+
+typedef struct ongoing_udp_message {
+    char body[64];
+    size_t length, nretries;
+    struct sockaddr recipient;
+    socklen_t recipient_size;
+    struct ongoing_udp_message *next;
+    struct timeval timestamp;
+    t_udp_message_type type;
+} t_ongoing_udp_message;
 
 typedef struct nodeinfo {
     // Node key
@@ -59,18 +75,8 @@ typedef struct nodeinfo {
     unsigned int shcut_port;
     // Shortcut network information
     struct addrinfo *shcut_info;
-    // Whether the node is waiting for its chord to acknowledge a message
-    int waiting_for_chord_ack;
-    // When the UDP message was sent to the chord
-    clock_t req_start;
-    // The type of message that's been waited for
-    char ongoing_udp_message[64];
-    // Entering node network information
-    struct addrinfo *entering_node_info;
-    // Whether the node is waiting for an entering node to acknowledge a message
-    int waiting_for_entering_node_ack;
-    // When the UDP message was sent by entering node
-    clock_t entering_node_req_start;
+    // List of ongoing UDP messages
+    t_ongoing_udp_message *udp_message_list;
 } t_nodeinfo;
 
 enum type {
@@ -149,6 +155,37 @@ t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port);
 int maxfd(t_nodeinfo *ni);
 
 /**
+ * @brief Register a new UDP message as ongoing (so we can wait for an ACK)
+ * 
+ * @param ni necessary information about the node
+ * @param message message body
+ * @param size size of the message
+ * @param recipient message's recipient
+ * @param recipient_size size of message recipient
+ * @param msgtype type of message
+ * @return [ @b int ] 0 if successfull, -1 if there is already an ongoing message to the same recipient
+ */
+int register_udp_message(t_nodeinfo *ni, char *message, size_t size, struct sockaddr *recipient, socklen_t recipient_size, t_udp_message_type msgtype);
+
+/**
+ * @brief Find an ongoing UDP message
+ * 
+ * @param ni necessary information about the node
+ * @param recipient who the message was sent to
+ * @return [ @b t_ongoing_udp_message* ] the message if it is found, NULL otherwise
+ */
+t_ongoing_udp_message *find_udp_message_from(t_nodeinfo *ni, struct sockaddr *recipient);
+
+/**
+ * @brief Find an ongoing UDP message and remove it from the list
+ * 
+ * @param ni necessary information about the node
+ * @param recipient who the message was sent to
+ * @return [ @b t_ongoing_udp_message* ] the message if it is found, NULL otherwise
+ */
+t_ongoing_udp_message *pop_udp_message_from(t_nodeinfo *ni, struct sockaddr *recipient);
+
+/**
  * @brief Frees a t_nodeinfo object
  * 
  * @param ni the t_nodeinfo object
@@ -222,5 +259,11 @@ void drop_request(unsigned int n, t_nodeinfo *ni);
  * 
  * @param ni necessary information about the node */
 void close_sockets(t_nodeinfo *ni);
+
+/**
+ * @brief Frees the memory associated with a t_ongoing_udp_message 
+ * 
+ */
+void free_udp_message_list(t_ongoing_udp_message *);
 
 #endif

@@ -2,6 +2,7 @@
 #define UTILS_H
 
 #define _POSIX_C_SOURCE 200112L
+#include "common.h"
 #include <stddef.h>
 #include <netdb.h>
 #include <arpa/inet.h>
@@ -89,5 +90,33 @@ void ipaddr_from_sockaddr(struct sockaddr *sa, char *dest);
  * @param key2 second key
  */
 unsigned int ring_distance(unsigned int key1, unsigned int key2);
+
+/**
+ * @brief Create a new ring
+ * 
+ * @param ni necessary information about the node
+ * @return [ @b int ] 0 if successfull, -1 otherwise 
+ */
+int create_ring(t_nodeinfo *ni);
+
+/**
+ * @brief Join an existing ring
+ * 
+ * @param pred_key key of the node's predecessor
+ * @param pred_ipaddr IP address of the node's predecessor
+ * @param pred_port network port of the node's predecessor
+ * @param ni necessary information about the node
+ * @return [ @b int ] 0 if successfull, -1 otherwise 
+ */
+int join_ring(unsigned int pred_key, char *pred_ipaddr, unsigned int pred_port, t_nodeinfo *ni);
+
+/**
+ * @brief Compare addresses a1 and a2
+ * 
+ * @param a1 first address to compare
+ * @param a2 second address to compare
+ * @return [ @b int ] 1 if both are equal, 0 otherwise
+ */
+int cmp_addr(struct sockaddr *a1, struct sockaddr *a2);
 
 #endif
