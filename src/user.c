@@ -68,6 +68,10 @@ int process_command_bentry(int boot, int port, char *ipaddr, t_nodeinfo *ni)
     if (udpsend(ni->udp_fd, message, strlen(message), res) != 0) {
         puts("\x1b[31m[!] Error sending EFND message\033[m");
         close_sockets(ni);
+        return 0;
+    }
+    else {
+        register_udp_message(ni, message, strlen(message), res->ai_addr, res->ai_addrlen, UDPMSG_ENTERING);
     }
     freeaddrinfo(res);
     return 0;
@@ -132,14 +136,12 @@ int process_command_show(t_nodeinfo *ni)
 
 int process_command_leave(t_nodeinfo *ni)
 {
-    if (ni->succ_fd == -1)
-        return 0;
 
     if (ni->pred_fd != -1)
         close(ni->pred_fd);
     ni->pred_fd = -1;
 
-    if (ni->succ_id != ni->key) {
+    if (ni->succ_id != ni->key && ni->succ_fd != -1) {
         char message[64] = "";
         sprintf(message, "PRED %u %s %u\n", ni->pred_id, ni->pred_ip, ni->pred_port);
         int result = sendall(ni->succ_fd, message, strlen(message));
@@ -149,7 +151,8 @@ int process_command_leave(t_nodeinfo *ni)
         }
     }
 
-    close(ni->succ_fd);
+    if (ni->succ_fd != -1)
+        close(ni->succ_fd);
     ni->succ_fd = -1;
     
     close(ni->main_fd);
@@ -179,7 +182,7 @@ int process_command_find(unsigned int key, t_nodeinfo *ni)
         return 0;
     }
 
-    if (register_request(ni->n, key, ni) < 0) {
+    if (register_request(ni->n, key, NULL, ni) < 0) {
         puts("Find request queue is full, try again later");
         return 0;
     }

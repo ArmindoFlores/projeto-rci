@@ -65,6 +65,9 @@ typedef struct nodeinfo {
     unsigned int n;
     // Search requests
     int requests[100];
+    // Search request info
+    struct sockaddr request_addr[100];
+    socklen_t request_addr_len[100];
     // Socket file descriptor for UDP server
     int udp_fd;
     // Shortcut key
@@ -233,9 +236,10 @@ t_read_out recv_message(int sd, char *buffer, char delim, size_t max_size, t_con
  * @param n request sequence number
  * @param key the key that's being searched
  * @param ni the t_nodeinfo object
+ * @param info information about who made the request
  * @return [ @b int ] 0 if successfull, -1 otherwise
  */
-int register_request(unsigned int n, unsigned int key, t_nodeinfo *ni);
+int register_request(unsigned int n, unsigned int key, struct addrinfo *info, t_nodeinfo *ni);
 
 /**
  * @brief Get the key associated with a sequence number
@@ -245,6 +249,17 @@ int register_request(unsigned int n, unsigned int key, t_nodeinfo *ni);
  * @return [ @b int ] the key if it is found, -1 otherwise 
  */
 int get_associated_key(unsigned int n, t_nodeinfo *ni);
+
+/**
+ * @brief Get the address info associated with a sequence number
+ * 
+ * @param n request sequence number
+ * @param dest where to store the socket address info
+ * @param dest_len where to store the sock address length
+ * @param ni the t_nodeinfo object
+ * @return [ @b int ] the key if it is found and has associated address info, -1 otherwise 
+ */
+int get_associated_addrinfo(unsigned int n, struct sockaddr *dest, socklen_t *dest_len, t_nodeinfo *ni);
 
 /**
  * @brief Drop a "find" request

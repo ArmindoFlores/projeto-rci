@@ -110,15 +110,26 @@ void process_found_key(unsigned int search_key, unsigned int n, char *ipaddr, un
         puts("\x1b[33m[!] Received \"RSP\" message without requesting it\033[m");
     }
     else {
-        drop_request(n, ni);
-        printf("Key %u belongs to node %u (%s:%u)\n", request_key, search_key, ipaddr, port);
-        // FIXME: check if this message was sent by the user/node
-        if (0) {
+        struct sockaddr sa;
+        socklen_t sa_len;
+        if (get_associated_addrinfo(n, &sa, &sa_len, ni) == 0) {
             char message[64] = "";
             sprintf(message, "EPRED %u %s %u", search_key, ipaddr, port);
-            // FIXME: NULL should be the node that requested
-            if (udpsend(ni->udp_fd, message, strlen(message), NULL));
+            // FIXME: res should be the node that requested
+            struct addrinfo ai;
+            ai.ai_addr = &sa;
+            ai.ai_addrlen = sa_len;
+            if (udpsend(ni->udp_fd, message, strlen(message), &ai) != 0) {
+                puts("\x1b[31m[!] Error sending EPRED message\033[m");
+            }
+            else {
+                register_udp_message(ni, message, strlen(message), &sa, sa_len, UDPMSG_ENTERING);
+            }
         }
+        else
+            printf("Key %u belongs to node %u (%s:%u)\n", request_key, search_key, ipaddr, port);
+
+        drop_request(n, ni);
     }
 }
 
@@ -528,9 +539,13 @@ int process_message_udp(t_nodeinfo *ni)
     char buffer[64] = "";
     
     ssize_t recvd_bytes = recvfrom(ni->udp_fd, buffer, sizeof(buffer) - 1, 0, sender.ai_addr, &sender.ai_addrlen);
+    if (recvd_bytes == -1) {
+        puts("\x1b[31m[!] Error in recvfrom\033[m");
+        return -1;
+    }
     if (recvd_bytes > 30) {
         // Invalid message
-        puts("\x1b[33[!] Received invalid UDP message\033[m");
+        puts("\x1b[33m[!] Received invalid UDP message\033[m");
     }
     buffer[recvd_bytes] = '\0';
 
@@ -538,102 +553,106 @@ int process_message_udp(t_nodeinfo *ni)
         t_ongoing_udp_message *msg = pop_udp_message_from(ni, sender.ai_addr);
         if (msg == NULL) {
             // Random ACK message??
-            puts("\x1b[33[!] Received an unprompted \"ACK\" message");
+            puts("\x1b[33m[!] Received an unprompted \"ACK\" message");
         }
         // Received an ACK and so removed message from list
+        puts("[*] Received ACK message, removing from list");
         free_udp_message_list(msg);
         return 0;
     }
-    else if (strncmp(buffer, "FND ", 4) == 0) {
-        unsigned int search_key, n, key, port;
-        char ipaddr[INET_ADDRSTRLEN] = "";
-        
-        t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
-        if (mi == MI_SUCCESS) {
-            puts("\x1b[32m[*] Received \"FND\" message, responding\033[m");
-            udpsend(ni->udp_fd, "ACK", 3, &sender);
-
-            unsigned int distance_self = ring_distance(ni->key, search_key);
-            unsigned int distance_succ = ring_distance(ni->succ_id, search_key);
-            if (distance_self < distance_succ) {
-                // Search key belongs to this node
-                puts("\x1b[33m[*] Found the key!\033[m");
-                char message[64] = "";
-                sprintf(message, "RSP %u %u %u %s %s\n", ni->key, n, key, ni->ipaddr, ni->self_port);
-                send_to_closest(message, key, ni);
-            }
-            else {
-                strcat(buffer, "\n");
-                send_to_closest(buffer, search_key, ni);
-            }
-
-            return 0;
-        }
-    }
-    else if (strncmp(buffer, "RSP ", 4) == 0) {
-        unsigned int search_key, n, key, port;
-        char ipaddr[INET_ADDRSTRLEN] = "";
-        
-        t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
-        if (mi == MI_SUCCESS) {
-            puts("\x1b[32m[*] Received \"RSP\" message, responding\033[m");
-            udpsend(ni->udp_fd, "ACK", 3, &sender);
-
-            if (key == ni->key)
-                process_found_key(search_key, n, ipaddr, port, ni);
-            else {
-                strcat(buffer, "\n");
-                send_to_closest(buffer, key, ni);
-            }
-
-            return 0;
-        }
-    }
-    else if (strncmp(buffer, "EFND ", 5) == 0) {
-        unsigned int key;
-        if ((sscanf(buffer+5, "%u", &key) != 1) || key > 31) {
-            // Malformatted message
-            puts("\x1b[33[!] Received malformatted \"EFND\" message\033[m");
-            return 0;
-        }
-
+    else {
         if (udpsend(ni->udp_fd, "ACK", 3, &sender) != 0) {
-            puts("\x1b[33[!] Error responding to \"EFND\" message\033[m");
+            puts("\x1b[33[!] Error acknowledging message\033[m");
             return 0;
         }
-        if ((ni->succ_id == ni->key && ni->pred_id == ni->key) || (ni->succ_id && ring_distance(ni->key, key) < ring_distance(ni->key, ni->succ_id))) {
-            printf("Key %u belongs to node %u (%s:%s)\n", key, ni->key, ni->ipaddr, ni->self_port);
+        if (strncmp(buffer, "FND ", 4) == 0) {
+            unsigned int search_key, n, key, port;
+            char ipaddr[INET_ADDRSTRLEN] = "";
+            
+            t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
+            if (mi == MI_SUCCESS) {
+                puts("\x1b[32m[*] Received \"FND\" message, responding\033[m");
+
+                unsigned int distance_self = ring_distance(ni->key, search_key);
+                unsigned int distance_succ = ring_distance(ni->succ_id, search_key);
+                if (distance_self < distance_succ) {
+                    // Search key belongs to this node
+                    puts("\x1b[33m[*] Found the key!\033[m");
+                    char message[64] = "";
+                    sprintf(message, "RSP %u %u %u %s %s\n", ni->key, n, key, ni->ipaddr, ni->self_port);
+                    send_to_closest(message, key, ni);
+                }
+                else {
+                    strcat(buffer, "\n");
+                    send_to_closest(buffer, search_key, ni);
+                }
+
+                return 0;
+            }
+        }
+        else if (strncmp(buffer, "RSP ", 4) == 0) {
+            unsigned int search_key, n, key, port;
+            char ipaddr[INET_ADDRSTRLEN] = "";
+            
+            t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
+            if (mi == MI_SUCCESS) {
+                puts("\x1b[32m[*] Received \"RSP\" message, responding\033[m");
+
+                if (key == ni->key)
+                    process_found_key(search_key, n, ipaddr, port, ni);
+                else {
+                    strcat(buffer, "\n");
+                    send_to_closest(buffer, key, ni);
+                }
+
+                return 0;
+            }
+        }
+        else if (strncmp(buffer, "EFND ", 5) == 0) {
+            unsigned int key;
+            if ((sscanf(buffer+5, "%u", &key) != 1) || key > 31) {
+                // Malformatted message
+                puts("\x1b[33[!] Received malformatted \"EFND\" message\033[m");
+                return 0;
+            }
+
+            if (register_request(ni->n, key, &sender, ni) < 0) {
+                puts("\x1b[33[!] Find request queue is full\033[m");
+                return 0;
+            }
+
+            if ((ni->succ_id == ni->key && ni->pred_id == ni->key) || (ni->succ_id && ring_distance(ni->key, key) < ring_distance(ni->key, ni->succ_id))) {
+                unsigned int self_port;
+                sscanf(ni->self_port, "%u", &self_port);
+                process_found_key(ni->key, ni->n, ni->ipaddr, self_port, ni);
+                return 0;
+            }
+
+            char message[64] = "";
+            sprintf(message, "FND %u %u %u %s %s\n", key, ni->n, ni->key, ni->ipaddr, ni->self_port);
+            
+            int result = send_to_closest(message, key, ni);
+            if (result < 0)
+                return 0;
+
+            ni->n++;
+            ni->n %= 100;
             return 0;
         }
-
-        if (register_request(ni->n, key, ni) < 0) {
-            puts("Find request queue is full, try again later");
-            return 0;
+        else if (strncmp(buffer, "EPRED ", 6) == 0) {
+            unsigned int key, port;
+            char ipaddr[INET_ADDRSTRLEN] = "";
+            t_msginfotype mi = get_self_or_pred_message_info(buffer+1, &key, ipaddr, &port);
+            if (mi != MI_SUCCESS) {
+                puts("\x1b[33[!] Received malformatted \"EPRED\" message\033[m");
+                return 0;
+            }
+            puts("\x1b[32m[*] Received \"EPRED\" message, joining the ring\033[m");
+            return join_ring(key, ipaddr, port, ni);
         }
-
-        char message[64] = "";
-        sprintf(message, "FND %u %u %u %s %s\n", key, ni->n, ni->key, ni->ipaddr, ni->self_port);
-        
-        int result = send_to_closest(message, key, ni);
-        if (result < 0)
-            return 0;
-
-        ni->n++;
-        ni->n %= 100;
-        return 0;
     }
-    else if (strncmp(buffer, "EPRED ", 6) == 0) {
-        unsigned int key, port;
-        char ipaddr[INET_ADDRSTRLEN] = "";
-        t_msginfotype mi = get_self_or_pred_message_info(buffer+1, &key, ipaddr, &port);
-        if (mi != MI_SUCCESS) {
-            puts("\x1b[33[!] Received malformatted \"EPRED\" message\033[m");
-            return 0;
-        }
-        return join_ring(key, ipaddr, port, ni);
-    }
 
-    printf("\x1b[33[!] Received invalid UDP message: '%s'\033[m\n", buffer);
+    printf("\x1b[33m[!] Received invalid UDP message: '%s'\033[m\n", buffer);
 
     return 0;
 }

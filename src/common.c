@@ -100,12 +100,14 @@ t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port)
     ni->n = 0;
     for (size_t i = 0; i < sizeof(ni->requests) / sizeof(int); i++)
         ni->requests[i] = -1;
+    memset(ni->request_addr, 0, sizeof(ni->request_addr));
+    memset(ni->request_addr_len, 0, sizeof(ni->request_addr_len));
     ni->shcut_info = NULL;
     ni->udp_message_list = NULL;
     return ni;
 }
 
-int register_request(unsigned int n, unsigned int key, t_nodeinfo *ni)
+int register_request(unsigned int n, unsigned int key, struct addrinfo *info, t_nodeinfo *ni)
 {
     if (n >= sizeof(ni->requests) / sizeof(int))
         return -1;
@@ -113,6 +115,10 @@ int register_request(unsigned int n, unsigned int key, t_nodeinfo *ni)
         return -1;
 
     ni->requests[n] = key;
+    if (info) {
+        memcpy(&ni->request_addr[n], info->ai_addr, sizeof(struct addrinfo));
+        ni->request_addr_len[n] = info->ai_addrlen;
+    }
     return 0;
 }
 
@@ -123,10 +129,21 @@ int get_associated_key(unsigned int n, t_nodeinfo *ni)
     return ni->requests[n];
 }
 
+int get_associated_addrinfo(unsigned int n, struct sockaddr *dest, socklen_t *dest_len, t_nodeinfo *ni)
+{
+    if (n >= sizeof(ni->requests) / sizeof(int) || ni->request_addr_len[n] == 0)
+        return -1;
+    *dest_len= ni->request_addr_len[n];
+    memcpy(dest, &ni->request_addr[n], sizeof(struct sockaddr));
+    return 0;
+}
+
 void drop_request(unsigned int n, t_nodeinfo *ni)
 {
-    if (n < sizeof(ni->requests) / sizeof(int))
+    if (n < sizeof(ni->requests) / sizeof(int)) {
         ni->requests[n] = -1;
+        ni->request_addr_len[n] = 0;
+    }
 }
 
 int maxfd(t_nodeinfo *si)
