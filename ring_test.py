@@ -149,7 +149,7 @@ def verify_pred_message(msg, processes, test_key, test_ip, test_port):
 
 def process_rsp_message(msg):
     try:
-        _, search_result, serial_n, key, ipaddr, port = msg[:-1].split(" ")
+        _, key, serial_n, search_result, ipaddr, port = msg[:-1].split(" ")
         return search_result, serial_n, key, ipaddr, port
     except (TypeError, ValueError):
         return None
@@ -835,7 +835,7 @@ def test_find_no_shorts(args):
                 return TestResult(False, f"Invalid value for parameter n '{key}' (should be a number between 0 and 31)", read_processes([node1_process, node2_process]))
 
             if serial_n >= 10 and serial_n < 20:
-                if search_result != serial_n:
+                if key != serial_n:
                     terminate_processes([node1_process, node2_process])
                     conn1_socket.close()
                     server_socket.close()

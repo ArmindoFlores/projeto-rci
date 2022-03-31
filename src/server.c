@@ -348,7 +348,7 @@ int process_message_predecessor(t_nodeinfo *ni)
             // Search key belongs to this node
             puts("\x1b[33m[*] Found the key!\033[m");
             char message[64] = "";
-            sprintf(message, "RSP %u %u %u %s %s\n", ni->key, n, key, ni->ipaddr, ni->self_port);
+            sprintf(message, "RSP %u %u %u %s %s\n", key, n, ni->key, ni->ipaddr, ni->self_port);
             int result = send_to_closest(message, key, ni);
             if (result != 0)
                 reset_pmt(&buffer_size, &ni->pred_fd);
@@ -366,7 +366,7 @@ int process_message_predecessor(t_nodeinfo *ni)
     else if (strncmp(buffer, "RSP ", 4) == 0) {
         unsigned int search_key, n, key, port;
         char ipaddr[INET_ADDRSTRLEN] = "";
-        t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
+        t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &key, &n, &search_key, ipaddr, &port);
         if (mi != MI_SUCCESS) {
             printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor): '%s'\033[m\n", ni->pred_ip, ni->pred_port, buffer);
             reset_pmt(&buffer_size, &ni->pred_fd);
@@ -579,7 +579,7 @@ int process_message_udp(t_nodeinfo *ni)
                     // Search key belongs to this node
                     puts("\x1b[33m[*] Found the key!\033[m");
                     char message[64] = "";
-                    sprintf(message, "RSP %u %u %u %s %s\n", ni->key, n, key, ni->ipaddr, ni->self_port);
+                    sprintf(message, "RSP %u %u %u %s %s\n", key, n, ni->key, ni->ipaddr, ni->self_port);
                     send_to_closest(message, key, ni);
                 }
                 else {
@@ -594,7 +594,7 @@ int process_message_udp(t_nodeinfo *ni)
             unsigned int search_key, n, key, port;
             char ipaddr[INET_ADDRSTRLEN] = "";
             
-            t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
+            t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &key, &n, &search_key, ipaddr, &port);
             if (mi == MI_SUCCESS) {
                 puts("\x1b[32m[*] Received \"RSP\" message, responding\033[m");
 
