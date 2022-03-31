@@ -7,10 +7,10 @@ OBJECTS := $(addprefix bin/,$(notdir $(FILES:.c=.o)))
 
 VPATH := src
 
-all: bin bin/main
+all: bin ring
 
-bin/main: $(OBJECTS)
-	$(CC) -o bin/main $(OBJECTS)
+ring: $(OBJECTS)
+	$(CC) -o ring $(OBJECTS)
 
 bin/%.o: %.c | $(HEADERS)
 	$(CC) $(CFLAGS) -Isrc -c $< -o $@
@@ -19,4 +19,5 @@ bin:
 	mkdir -p bin
 
 clean:
-	rm -rf bin/*
+	rm -rf bin/* ring
+
