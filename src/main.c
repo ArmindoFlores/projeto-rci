@@ -39,7 +39,7 @@ void check_for_lost_udp_messages(t_nodeinfo *ni)
     gettimeofday(&now, NULL);
     for (t_ongoing_udp_message *aux = ni->udp_message_list, *prev = NULL; aux != NULL; prev = aux, aux = aux->next) {
         double time_taken = now.tv_sec - aux->timestamp.tv_sec + 1e-6 * (now.tv_usec - aux->timestamp.tv_usec);
-        if (time_taken > 0.005) {
+        if (time_taken > 0.025) {
             // Timeout
             if (aux->nretries) {
                 aux->nretries--;
