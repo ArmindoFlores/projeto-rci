@@ -113,9 +113,10 @@ void process_found_key(unsigned int search_key, unsigned int n, char *ipaddr, un
         struct sockaddr sa;
         socklen_t sa_len;
         if (get_associated_addrinfo(n, &sa, &sa_len, ni) == 0) {
+            // Find request was initiated by an EFND message
             char message[64] = "";
             sprintf(message, "EPRED %u %s %u", search_key, ipaddr, port);
-            // FIXME: res should be the node that requested
+
             struct addrinfo ai;
             ai.ai_addr = &sa;
             ai.ai_addrlen = sa_len;
@@ -126,7 +127,7 @@ void process_found_key(unsigned int search_key, unsigned int n, char *ipaddr, un
                 register_udp_message(ni, message, strlen(message), &sa, sa_len, UDPMSG_ENTERING);
             }
         }
-        else
+        else  // Find request was initiated by the user
             printf("Key %u belongs to node %u (%s:%u)\n", request_key, search_key, ipaddr, port);
 
         drop_request(n, ni);
@@ -373,10 +374,12 @@ int process_message_predecessor(t_nodeinfo *ni)
             return 0;
         }
         if (key == ni->key) {
+            // This message is meant for this node. Process it
             process_found_key(search_key, n, ipaddr, port, ni);
             buffer_size = 0;
         }
         else {
+            // This message is not meant for this node. Forward it.
             int result = send_to_closest(buffer, search_key, ni);
             if (result < 0)
                 reset_pmt(&buffer_size, &ni->pred_fd);
