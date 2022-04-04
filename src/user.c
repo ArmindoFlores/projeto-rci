@@ -347,6 +347,8 @@ int process_user_message(t_nodeinfo *ni)
     size_t buffer_l = strlen(buffer);
     if (buffer_l > 0)
         buffer[buffer_l-1] = '\0';
+    if (buffer_l == 1)
+        return 0;
     printf("Invalid command \"%s\".\nAvailable commands:\n", buffer);
     puts("");
     puts("\t\x1b[4mb\033[mentry \x1b[3mboot boot.IP boot.port\033[m -> join \x1b[3mboot\033[m's ring");
