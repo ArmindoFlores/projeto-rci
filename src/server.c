@@ -253,6 +253,57 @@ int process_message_successor(t_nodeinfo *ni)
     return 0;
 }
 
+int process_fnd_message(char *buffer, size_t buffer_size, t_nodeinfo *ni)
+{
+    unsigned int search_key, n, key, port;
+    char ipaddr[INET_ADDRSTRLEN] = "";
+    t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
+    if (mi != MI_SUCCESS) {
+        printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor): '%s'\033[m\n", ni->pred_ip, ni->pred_port, buffer);
+        return -1;
+    }
+    // Calculate distance to self, successor, and shortcut
+    unsigned int distance_self = ring_distance(ni->key, search_key);
+    unsigned int distance_succ = ring_distance(ni->succ_id, search_key);
+    if (distance_self < distance_succ) {
+        // Search key belongs to this node
+        puts("\x1b[33m[*] Found the key!\033[m");
+        char message[64] = "";
+        sprintf(message, "RSP %u %u %u %s %s\n", key, n, ni->key, ni->ipaddr, ni->self_port);
+        int result = send_to_closest(message, key, ni);
+        if (result != 0)
+            return -1;
+    }
+    else {
+        int result = send_to_closest(buffer, search_key, ni);
+        if (result < 0)
+            return -1;
+    }
+    return 0;
+}
+
+int process_rsp_message(char *buffer, size_t buffer_size, t_nodeinfo *ni)
+{
+    unsigned int search_key, n, key, port;
+    char ipaddr[INET_ADDRSTRLEN] = "";
+    t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &key, &n, &search_key, ipaddr, &port);
+    if (mi != MI_SUCCESS) {
+        printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor): '%s'\033[m\n", ni->pred_ip, ni->pred_port, buffer);
+        return -1;
+    }
+    if (key == ni->key) {
+        // This message is meant for this node. Process it
+        process_found_key(search_key, n, ipaddr, port, ni);
+    }
+    else {
+        // This message is not meant for this node. Forward it.
+        int result = send_to_closest(buffer, search_key, ni);
+        if (result < 0)
+            return -1;
+    }
+    return 0;
+}
+
 int process_message_predecessor(t_nodeinfo *ni)
 {
     // This is the internal buffer that keep track of what has been
@@ -334,58 +385,16 @@ int process_message_predecessor(t_nodeinfo *ni)
         }
     }
     else if (strncmp(buffer, "FND ", 4) == 0) {
-        unsigned int search_key, n, key, port;
-        char ipaddr[INET_ADDRSTRLEN] = "";
-        t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
-        if (mi != MI_SUCCESS) {
-            printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor): '%s'\033[m\n", ni->pred_ip, ni->pred_port, buffer);
+        if (process_fnd_message(buffer, buffer_size, ni) != 0)
             reset_pmt(&buffer_size, &ni->pred_fd);
-            return 0;
-        }
-        // Calculate distance to self, successor, and shortcut
-        unsigned int distance_self = ring_distance(ni->key, search_key);
-        unsigned int distance_succ = ring_distance(ni->succ_id, search_key);
-        if (distance_self < distance_succ) {
-            // Search key belongs to this node
-            puts("\x1b[33m[*] Found the key!\033[m");
-            char message[64] = "";
-            sprintf(message, "RSP %u %u %u %s %s\n", key, n, ni->key, ni->ipaddr, ni->self_port);
-            int result = send_to_closest(message, key, ni);
-            if (result != 0)
-                reset_pmt(&buffer_size, &ni->pred_fd);
-            buffer_size = 0;
-            return 0;
-        }
-        else {
-            int result = send_to_closest(buffer, search_key, ni);
-            if (result < 0)
-                reset_pmt(&buffer_size, &ni->pred_fd);
-            buffer_size = 0;
-            return 0;
-        }
+        buffer_size = 0;
+        return 0;
     }
     else if (strncmp(buffer, "RSP ", 4) == 0) {
-        unsigned int search_key, n, key, port;
-        char ipaddr[INET_ADDRSTRLEN] = "";
-        t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &key, &n, &search_key, ipaddr, &port);
-        if (mi != MI_SUCCESS) {
-            printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor): '%s'\033[m\n", ni->pred_ip, ni->pred_port, buffer);
+        if (process_rsp_message(buffer, buffer_size, ni) != 0)
             reset_pmt(&buffer_size, &ni->pred_fd);
-            return 0;
-        }
-        if (key == ni->key) {
-            // This message is meant for this node. Process it
-            process_found_key(search_key, n, ipaddr, port, ni);
-            buffer_size = 0;
-        }
-        else {
-            // This message is not meant for this node. Forward it.
-            int result = send_to_closest(buffer, search_key, ni);
-            if (result < 0)
-                reset_pmt(&buffer_size, &ni->pred_fd);
-            buffer_size = 0;
-            return 0;
-        }
+        buffer_size = 0;
+        return 0;
     }
     else {
         // Message is invalid
@@ -569,47 +578,14 @@ int process_message_udp(t_nodeinfo *ni)
             return 0;
         }
         if (strncmp(buffer, "FND ", 4) == 0) {
-            unsigned int search_key, n, key, port;
-            char ipaddr[INET_ADDRSTRLEN] = "";
-            
-            t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
-            if (mi == MI_SUCCESS) {
-                puts("\x1b[32m[*] Received \"FND\" message, responding\033[m");
-
-                unsigned int distance_self = ring_distance(ni->key, search_key);
-                unsigned int distance_succ = ring_distance(ni->succ_id, search_key);
-                if (distance_self < distance_succ) {
-                    // Search key belongs to this node
-                    puts("\x1b[33m[*] Found the key!\033[m");
-                    char message[64] = "";
-                    sprintf(message, "RSP %u %u %u %s %s\n", key, n, ni->key, ni->ipaddr, ni->self_port);
-                    send_to_closest(message, key, ni);
-                }
-                else {
-                    strcat(buffer, "\n");
-                    send_to_closest(buffer, search_key, ni);
-                }
-
-                return 0;
-            }
+            strcat(buffer, "\n");
+            process_fnd_message(buffer, recvd_bytes+1, ni);
+            return 0;
         }
         else if (strncmp(buffer, "RSP ", 4) == 0) {
-            unsigned int search_key, n, key, port;
-            char ipaddr[INET_ADDRSTRLEN] = "";
-            
-            t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &key, &n, &search_key, ipaddr, &port);
-            if (mi == MI_SUCCESS) {
-                puts("\x1b[32m[*] Received \"RSP\" message, responding\033[m");
-
-                if (key == ni->key)
-                    process_found_key(search_key, n, ipaddr, port, ni);
-                else {
-                    strcat(buffer, "\n");
-                    send_to_closest(buffer, key, ni);
-                }
-
-                return 0;
-            }
+            strcat(buffer, "\n");
+            process_rsp_message(buffer, recvd_bytes+1, ni);
+            return 0;
         }
         else if (strncmp(buffer, "EFND ", 5) == 0) {
             unsigned int key;
