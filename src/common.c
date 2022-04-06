@@ -157,13 +157,14 @@ int maxfd(t_nodeinfo *si)
 
 int register_udp_message(t_nodeinfo *ni, char *message, size_t size, struct sockaddr *recipient, socklen_t recipient_size, t_udp_message_type msgtype)
 {
-    t_ongoing_udp_message *aux = NULL;
-    for (aux = ni->udp_message_list; aux != NULL; aux = aux->next) {
+    t_ongoing_udp_message *aux = NULL, *prev = NULL;
+    for (aux = ni->udp_message_list; aux != NULL; prev = aux, aux = aux->next) {
         if (cmp_addr(&aux->recipient, recipient)) {
             // There is already an ongoing message to this recipient
             return -1;
         }
     }
+    aux = prev;
     if (aux == NULL) {
         ni->udp_message_list = (t_ongoing_udp_message*) malloc(sizeof(t_ongoing_udp_message));
         aux = ni->udp_message_list;

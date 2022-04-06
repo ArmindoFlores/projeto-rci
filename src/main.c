@@ -37,7 +37,9 @@ void check_for_lost_udp_messages(t_nodeinfo *ni)
 {
     struct timeval now;
     gettimeofday(&now, NULL);
-    for (t_ongoing_udp_message *aux = ni->udp_message_list, *prev = NULL; aux != NULL; prev = aux, aux = aux->next) {
+
+    t_ongoing_udp_message *aux = ni->udp_message_list, *prev = NULL;
+    while (aux != NULL) {
         double time_taken = now.tv_sec - aux->timestamp.tv_sec + 1e-6 * (now.tv_usec - aux->timestamp.tv_usec);
         if (time_taken > 0.025) {
             // Timeout
@@ -54,9 +56,6 @@ void check_for_lost_udp_messages(t_nodeinfo *ni)
             }
             else {
                 // Expire
-                if (prev != NULL)
-                    prev->next = aux->next;
-                aux->next = NULL;
 
                 if (aux->type == UDPMSG_CHORD) {
                     // Send message through successor instead
@@ -78,15 +77,23 @@ void check_for_lost_udp_messages(t_nodeinfo *ni)
                     puts("\x1b[33m[!] Failed to send UDP message to new node\033[m");
                 }
 
-                t_ongoing_udp_message *temp = aux;
+                t_ongoing_udp_message *temp = aux->next;
+                if (prev != NULL)
+                    prev->next = aux->next;
+                else
+                    ni->udp_message_list = aux->next;
+
+                aux->next = NULL;
+                free_udp_message_list(aux);
                 aux = prev;
-                free_udp_message_list(temp);
                 if (aux == NULL) {
-                    ni->udp_message_list = NULL;
-                    break;
+                    aux = temp;
+                    continue;
                 }
             }
         }
+        prev = aux;
+        aux = aux->next;
     }
 }
 
