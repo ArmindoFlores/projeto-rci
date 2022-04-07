@@ -124,8 +124,7 @@ void process_found_key(unsigned int search_key, unsigned int n, char *ipaddr, un
                 puts("\x1b[31m[!] Error sending EPRED message\033[m");
             }
             else {
-                int result = register_udp_message(ni, message, strlen(message), &sa, sa_len, UDPMSG_ENTERING);
-                printf("Result: %d\n", result);
+                register_udp_message(ni, message, strlen(message), &sa, sa_len, UDPMSG_ENTERING);
             }
         }
         else  // Find request was initiated by the user
