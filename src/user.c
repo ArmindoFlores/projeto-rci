@@ -133,12 +133,16 @@ int process_command_show(t_nodeinfo *ni)
     print_info("Shortcut", ni->shcut_id, ni->shcut_ip, ni->shcut_port, ni->shcut_info != NULL);
     puts("");
     
-    puts("{");
+    putchar('{');
+    int any = 0;
     for (unsigned int key = 0; key < 32; key++) {
         if (ni->objects[key] != NULL) {
-            printf("\t%u -> \"%s\",\n", key, ni->objects[key]);
+            printf("\n\t%u -> \"%s\",", key, ni->objects[key]);
+            any = 1;
         }
     }
+    if (any)
+        putchar('\n');
     puts("}");
 
     return 0;
@@ -284,7 +288,10 @@ int process_command_get(unsigned int key, t_nodeinfo *ni)
 int process_command_set(unsigned int key, char *value, t_nodeinfo *ni)
 {
     if ((ni->succ_id == ni->key && ni->pred_id == ni->key) || (ni->succ_id && ring_distance(ni->key, key) < ring_distance(ni->key, ni->succ_id))) {
-        set_object(key, value, ni);
+        if (strlen(value) == 0)
+            set_object(key, NULL, ni);
+        else
+            set_object(key, value, ni);
         return 0;
     }
 
