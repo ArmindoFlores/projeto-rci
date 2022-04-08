@@ -131,18 +131,40 @@ int process_command_show(t_nodeinfo *ni)
     print_info("Self", ni->key, ni->ipaddr, self_port, 1);
     print_info("Successor", ni->succ_id, ni->succ_ip, ni->succ_port, ni->succ_fd != -1);
     print_info("Shortcut", ni->shcut_id, ni->shcut_ip, ni->shcut_port, ni->shcut_info != NULL);
+    puts("");
+    
+    puts("{");
+    for (unsigned int key = 0; key < 32; key++) {
+        if (ni->objects[key] != NULL) {
+            printf("\t%u -> \"%s\",\n", key, ni->objects[key]);
+        }
+    }
+    puts("}");
+
     return 0;
 }
 
 int process_command_leave(t_nodeinfo *ni)
 {
 
-    if (ni->pred_fd != -1)
-        close(ni->pred_fd);
-    ni->pred_fd = -1;
-
     if (ni->succ_id != ni->key && ni->succ_fd != -1) {
         char message[64] = "";
+
+        if (ni->pred_fd != -1) {
+            for (unsigned int i = 0; i < 32; i++) {
+                if (ni->objects[i] != NULL) {
+                    sprintf(message, "SET %u %u %u %s\n", i, ni->find_n, ni->key, ni->objects[i]);
+                    free(ni->objects[i]);
+                    ni->objects[i] = NULL;
+                    int result = sendall(ni->pred_fd, message, strlen(message));
+                    if (result < 0)
+                        return result;
+                    ni->find_n++;
+                    ni->find_n %= 100;
+                }
+            }
+        }
+
         sprintf(message, "PRED %u %s %u\n", ni->pred_id, ni->pred_ip, ni->pred_port);
         int result = sendall(ni->succ_fd, message, strlen(message));
         if (result != 0) {
@@ -150,6 +172,10 @@ int process_command_leave(t_nodeinfo *ni)
             return -1;
         }
     }
+
+    if (ni->pred_fd != -1)
+        close(ni->pred_fd);
+    ni->pred_fd = -1;
 
     if (ni->succ_fd != -1)
         close(ni->succ_fd);
@@ -182,20 +208,20 @@ int process_command_find(unsigned int key, t_nodeinfo *ni)
         return 0;
     }
 
-    if (register_request(ni->n, key, NULL, ni) < 0) {
+    if (register_request(ni->find_n, key, NULL, ni) < 0) {
         puts("Find request queue is full, try again later");
         return 0;
     }
 
     char message[64] = "";
-    sprintf(message, "FND %u %u %u %s %s\n", key, ni->n, ni->key, ni->ipaddr, ni->self_port);
+    sprintf(message, "FND %u %u %u %s %s\n", key, ni->find_n, ni->key, ni->ipaddr, ni->self_port);
     
     int result = send_to_closest(message, key, ni);
     if (result < 0)
         return 0;
 
-    ni->n++;
-    ni->n %= 100;
+    ni->find_n++;
+    ni->find_n %= 100;
     return 0;
 }
 
@@ -224,6 +250,53 @@ int process_command_echord(t_nodeinfo *ni)
     else
         puts("No shortcut to delete");
     ni->shcut_info = NULL;
+    return 0;
+}
+
+int process_command_get(unsigned int key, t_nodeinfo *ni)
+{
+    if ((ni->succ_id == ni->key && ni->pred_id == ni->key) || (ni->succ_id && ring_distance(ni->key, key) < ring_distance(ni->key, ni->succ_id))) {
+        char *object = get_object(key, ni);
+        if (object == NULL)
+            printf("%u -> NULL\n", key);
+        else
+            printf("%u -> \"%s\"\n", key, object);
+        return 0;
+    }
+
+    if (register_request(ni->find_n, key, NULL, ni) < 0) {
+        puts("Get request queue is full, try again later");
+        return 0;
+    }
+
+    char message[64] = "";
+    sprintf(message, "GET %u %u %u %s %s\n", key, ni->find_n, ni->key, ni->ipaddr, ni->self_port);
+    
+    int result = send_to_closest(message, key, ni);
+    if (result < 0)
+        return 0;
+
+    ni->find_n++;
+    ni->find_n %= 100;
+    return 0;
+}
+
+int process_command_set(unsigned int key, char *value, t_nodeinfo *ni)
+{
+    if ((ni->succ_id == ni->key && ni->pred_id == ni->key) || (ni->succ_id && ring_distance(ni->key, key) < ring_distance(ni->key, ni->succ_id))) {
+        set_object(key, value, ni);
+        return 0;
+    }
+
+    char message[64] = "";
+    sprintf(message, "SET %u %u %u %s\n", key, ni->find_n, ni->key, value != NULL ? value : "");
+    
+    int result = send_to_closest(message, key, ni);
+    if (result < 0)
+        return 0;
+
+    ni->find_n++;
+    ni->find_n %= 100;
     return 0;
 }
 
@@ -311,6 +384,45 @@ int process_user_message(t_nodeinfo *ni)
         }
         return process_command_find(key, ni);
     }
+    if (strncmp(buffer, "get", 3) == 0 || strncmp(buffer, "g ", 2) == 0 || strncmp(buffer, "g\n", 2) == 0) {
+        unsigned int key;
+        char *start_pos = strchr(buffer, ' ');
+        if (!start_pos || sscanf(start_pos+1, "%u", &key) != 1) {
+            puts("Invalid format.\nUsage: \x1b[4mg\033[met k");
+            return 0;
+        }
+        if (key > 31) {
+            puts("Invalid key (maximum is 31)");
+            return 0;
+        }
+        if (ni->main_fd == -1) {
+            puts("Node is not in a ring");
+            return 0;
+        }
+        return process_command_get(key, ni);
+    }
+    if (strncmp(buffer, "set", 3) == 0 || strncmp(buffer, "se ", 3) == 0 || strncmp(buffer, "se\n", 3) == 0) {
+        unsigned int key;
+        char value[24] = "";
+        char *start_pos = strchr(buffer, ' ');
+        if (!start_pos || sscanf(start_pos+1, "%u %16s", &key, value) != 2) {
+            if (sscanf(start_pos+1, "%u", &key) != 1) {
+                puts("Invalid format.\nUsage: \x1b[4ms\033[met k [value]");
+                return 0;
+            }
+            else
+                value[0] = '\0';
+        }
+        if (key > 31) {
+            puts("Invalid key (maximum is 31)");
+            return 0;
+        }
+        if (ni->main_fd == -1) {
+            puts("Node is not in a ring");
+            return 0;
+        }
+        return process_command_set(key, value, ni);
+    }
     if (strncmp(buffer, "chord", 5) == 0 || strncmp(buffer, "c ", 2) == 0 || strncmp(buffer, "c\n", 2) == 0) {
         unsigned int shcut_id, shcut_port;
         char shcut_ipaddr[INET_ADDRSTRLEN] = "";
@@ -360,5 +472,9 @@ int process_user_message(t_nodeinfo *ni)
     puts("\t\x1b[4mn\033[mew                           -> create new ring");
     puts("\t\x1b[4mp\033[mentry \x1b[3mpred pred.IP pred.port\033[m -> join a ring and set \x1b[3mpred\033[m as predecessor");
     puts("\t\x1b[4ms\033[mhow                          -> show current node state");
+    puts("");
+    puts("\t\x1b[4mg\033[met \x1b[3mk\033[m                         -> get value associated with key \x1b[3mk\033[m");
+    puts("\t\x1b[4mse\033[mt \x1b[3mk\033[m \x1b[3mvalue\033[m                   -> set key \x1b[3mk\033[m's value to \x1b[3mvalue\033[m");
+
     return 0;
 }

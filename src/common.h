@@ -62,7 +62,7 @@ typedef struct nodeinfo {
     // Successor ID
     unsigned int succ_id;
     // Search sequence number
-    unsigned int n;
+    unsigned int find_n;
     // Search requests
     int requests[100];
     // Search request info
@@ -80,6 +80,8 @@ typedef struct nodeinfo {
     struct addrinfo *shcut_info;
     // List of ongoing UDP messages
     t_ongoing_udp_message *udp_message_list;
+    // Object storage
+    char *objects[32];
 } t_nodeinfo;
 
 enum type {
@@ -187,6 +189,24 @@ t_ongoing_udp_message *find_udp_message_from(t_nodeinfo *ni, struct sockaddr *re
  * @return [ @b t_ongoing_udp_message* ] the message if it is found, NULL otherwise
  */
 t_ongoing_udp_message *pop_udp_message_from(t_nodeinfo *ni, struct sockaddr *recipient);
+
+/**
+ * @brief Get an object stored in the DB by its key
+ * 
+ * @param key object's key
+ * @param ni necessary information about the node 
+ * @return [ @b char* ] the stored object 
+ */
+char *get_object(unsigned int key, t_nodeinfo* ni);
+
+/**
+ * @brief Store a value associated with a key in the DB
+ * 
+ * @param key object's key
+ * @param value object's value
+ * @param ni necessary information about the node 
+ */
+void set_object(unsigned int key, char *value, t_nodeinfo *ni);
 
 /**
  * @brief Frees a t_nodeinfo object

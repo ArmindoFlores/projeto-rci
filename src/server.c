@@ -191,7 +191,7 @@ void reset_pmt(size_t *buffer_size, int *fd)
  */
 t_read_out process_incoming(int *sfd, char *buffer, size_t *buffer_size, size_t max_buffer_size, t_conn_info *ci)
 {
-    // Receive message (either from socker or internal buffers)
+    // Receive message (either from socket or internal buffers)
     t_read_out ro = recv_message(*sfd, buffer+(*buffer_size), '\n', max_buffer_size-(*buffer_size)-1, ci);
     if (ro.read_type == RO_SUCCESS) {
         // Successfully read, update buffer
@@ -199,6 +199,7 @@ t_read_out process_incoming(int *sfd, char *buffer, size_t *buffer_size, size_t 
         if (*buffer_size >= max_buffer_size-1 && buffer[max_buffer_size-1] != '\n') {
             // This is already an invalid message (too big)
             reset_pmt(buffer_size, sfd);
+            printf("-> %s\n", buffer);
             puts("\x1b[31m[!] Received a message with invalid size\033[m");
             ro.read_type = RO_DISCONNECT;
             return ro;
@@ -221,43 +222,11 @@ t_read_out process_incoming(int *sfd, char *buffer, size_t *buffer_size, size_t 
     return ro;
 }
 
-int process_message_successor(t_nodeinfo *ni)
-{
-    //! This function is a work-in-progress
-    // This is the internal buffer that keep track of what has been
-    // sent through ni->succ_fd
-    static char buffer[64];
-    // This is the current size of the internal buffer
-    static size_t buffer_size = 0;
-
-    t_read_out ro = process_incoming(&ni->succ_fd, buffer, &buffer_size, sizeof(buffer), ni->successor);
-    if (ro.read_type == RO_ERROR)
-        return ro.error_code;
-    if (ro.read_type == RO_DISCONNECT) {
-        // !! Successor has disconnected!
-        puts("\x1b[33m[!] Successor has disconnected abruptly (ring may be broken)\033[m");
-        if (ni->succ_fd == ni->pred_fd) {
-            // This is a two-node network
-            ni->pred_fd = -1;
-        }
-        reset_pmt(&buffer_size, &ni->succ_fd);
-        return 0;
-    }
-
-    if (buffer[buffer_size-1] != '\n') {
-        // We might not have received the whole message yet
-        return 0;
-    }
-
-    printf("[*] Received from successor: '%s'\n", buffer);
-    return 0;
-}
-
 int process_fnd_message(char *buffer, size_t buffer_size, t_nodeinfo *ni)
 {
     unsigned int search_key, n, key, port;
     char ipaddr[INET_ADDRSTRLEN] = "";
-    t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
+    t_msginfotype mi = get_fnd_or_rsp_or_get_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
     if (mi != MI_SUCCESS) {
         printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor): '%s'\033[m\n", ni->pred_ip, ni->pred_port, buffer);
         return -1;
@@ -286,7 +255,7 @@ int process_rsp_message(char *buffer, size_t buffer_size, t_nodeinfo *ni)
 {
     unsigned int search_key, n, key, port;
     char ipaddr[INET_ADDRSTRLEN] = "";
-    t_msginfotype mi = get_fnd_or_rsp_message_info(buffer, &key, &n, &search_key, ipaddr, &port);
+    t_msginfotype mi = get_fnd_or_rsp_or_get_message_info(buffer, &key, &n, &search_key, ipaddr, &port);
     if (mi != MI_SUCCESS) {
         printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor): '%s'\033[m\n", ni->pred_ip, ni->pred_port, buffer);
         return -1;
@@ -297,10 +266,156 @@ int process_rsp_message(char *buffer, size_t buffer_size, t_nodeinfo *ni)
     }
     else {
         // This message is not meant for this node. Forward it.
+        int result = send_to_closest(buffer, key, ni);
+        if (result < 0)
+            return -1;
+    }
+    return 0;
+}
+
+int process_get_message(char *buffer, size_t buffer_size, t_nodeinfo *ni)
+{
+    unsigned int search_key, n, key, port;
+    char ipaddr[INET_ADDRSTRLEN] = "";
+    t_msginfotype mi = get_fnd_or_rsp_or_get_message_info(buffer, &search_key, &n, &key, ipaddr, &port);
+    if (mi != MI_SUCCESS) {
+        printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor): '%s'\033[m\n", ni->pred_ip, ni->pred_port, buffer);
+        return -1;
+    }
+    if (ring_distance(ni->key, search_key) < ring_distance(ni->succ_id, search_key)) {
+        // This node has this object; forward its value
+        char message[64] = "";
+        char *object = get_object(search_key, ni);
+
+        puts("\x1b[33m[*] Found the object!\033[m");
+        sprintf(message, "RGET %u %u %u %s\n", key, n, search_key, object != NULL ? object : "");
+        int result = send_to_closest(message, key, ni);
+        if (result < 0)
+            return -1;
+    }
+    else {
+        // This message is not meant for this node. Forward it.
         int result = send_to_closest(buffer, search_key, ni);
         if (result < 0)
             return -1;
     }
+    return 0;
+}
+
+int process_rget_message(char *buffer, size_t buffer_size, t_nodeinfo *ni)
+{
+    unsigned int search_key, n, key;
+    char value[24] = "";
+    t_msginfotype mi = get_rget_or_set_message_info(buffer+5, &key, &n, &search_key, value);
+    if (mi != MI_SUCCESS) {
+        printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor): '%s'\033[m\n", ni->pred_ip, ni->pred_port, buffer);
+        return -1;
+    }
+    if (key == ni->key) {
+        // This message is meant for this node. Process it
+        int key = get_associated_key(n, ni);
+        if (key == -1) {
+            puts("\x1b[33m[!] Received \"RSP\" message without requesting it\033[m");
+            return -1;
+        }
+        if (strlen(value) == 0)
+            printf("%d -> NULL\n", key);
+        else
+            printf("%d -> \"%s\"\n", key, value);
+        drop_request(n, ni);
+    }
+    else {
+        // This message is not meant for this node. Forward it.
+        int result = send_to_closest(buffer, key, ni);
+        if (result < 0)
+            return -1;
+    }
+    return 0;
+}
+
+int process_set_message(char *buffer, size_t buffer_size, int from_successor, t_nodeinfo *ni)
+{
+    unsigned int search_key, n, key;
+    char value[24] = "";
+    t_msginfotype mi = get_rget_or_set_message_info(buffer+4, &search_key, &n, &key, value);
+    if (mi != MI_SUCCESS) {
+        printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor): '%s'\033[m\n", ni->pred_ip, ni->pred_port, buffer);
+        return -1;
+    }
+    if (from_successor || ring_distance(ni->key, search_key) < ring_distance(ni->succ_id, search_key)) {
+        // This node has this object; set its value
+        if (strlen(value) == 0)
+            set_object(search_key, NULL, ni);
+        else
+            set_object(search_key, value, ni);
+    }
+    else {
+        // This message is not meant for this node. Forward it.
+        int result = send_to_closest(buffer, search_key, ni);
+        if (result < 0)
+            return -1;
+    }
+    return 0;
+}
+
+int redestribute_objects(t_nodeinfo *ni)
+{
+    char message[64] = "";
+    for (unsigned int i = 0; i < 32; i++) {
+        if (ni->objects[i] != NULL && ring_distance(ni->key, i) > ring_distance(ni->succ_id, i)) {
+            sprintf(message, "SET %u %u %u %s\n", i, ni->find_n, ni->key, ni->objects[i]);
+            free(ni->objects[i]);
+            ni->objects[i] = NULL;
+            int result = send_to_closest(message, i, ni);
+            if (result < 0)
+                return result;
+            ni->find_n++;
+            ni->find_n %= 100;
+        }
+    }
+    return 0;
+}
+
+int process_message_successor(t_nodeinfo *ni)
+{
+    // This is the internal buffer that keep track of what has been
+    // sent through ni->succ_fd
+    static char buffer[64];
+    // This is the current size of the internal buffer
+    static size_t buffer_size = 0;
+
+    t_read_out ro = process_incoming(&ni->succ_fd, buffer, &buffer_size, sizeof(buffer), ni->successor);
+    if (ro.read_type == RO_ERROR)
+        return ro.error_code;
+    if (ro.read_type == RO_DISCONNECT) {
+        // !! Successor has disconnected!
+        puts("\x1b[33m[!] Successor has disconnected abruptly (ring may be broken)\033[m");
+        if (ni->succ_fd == ni->pred_fd) {
+            // This is a two-node network
+            ni->pred_fd = -1;
+        }
+        reset_pmt(&buffer_size, &ni->succ_fd);
+        return 0;
+    }
+
+    if (buffer[buffer_size-1] != '\n') {
+        // We might not have received the whole message yet
+        return 0;
+    }
+
+    if (strncmp(buffer, "SET ", 4) == 0) {
+        if (process_set_message(buffer, buffer_size, 1, ni) != 0)
+            reset_pmt(&buffer_size, &ni->pred_fd);
+        buffer_size = 0;
+        return 0;
+    }
+    else {
+        // Message is invalid
+        reset_pmt(&buffer_size, &ni->pred_fd);
+        printf("\x1b[31m[!] Discarded message: length, termination or header ('%s')\033[m\n", buffer);
+        return 0;
+    }
+    
     return 0;
 }
 
@@ -392,6 +507,24 @@ int process_message_predecessor(t_nodeinfo *ni)
     }
     else if (strncmp(buffer, "RSP ", 4) == 0) {
         if (process_rsp_message(buffer, buffer_size, ni) != 0)
+            reset_pmt(&buffer_size, &ni->pred_fd);
+        buffer_size = 0;
+        return 0;
+    }
+    else if (strncmp(buffer, "GET ", 4) == 0) {
+        if (process_get_message(buffer, buffer_size, ni) != 0)
+            reset_pmt(&buffer_size, &ni->pred_fd);
+        buffer_size = 0;
+        return 0;
+    }
+    else if (strncmp(buffer, "SET ", 4) == 0) {
+        if (process_set_message(buffer, buffer_size, 0, ni) != 0)
+            reset_pmt(&buffer_size, &ni->pred_fd);
+        buffer_size = 0;
+        return 0;
+    }
+    else if (strncmp(buffer, "RGET ", 5) == 0) {
+        if (process_rget_message(buffer, buffer_size, ni) != 0)
             reset_pmt(&buffer_size, &ni->pred_fd);
         buffer_size = 0;
         return 0;
@@ -538,6 +671,9 @@ int process_message_temp(t_nodeinfo *ni)
     reset_conn_buffer(ni->temp);   
     ni->temp_fd = -1;
 
+    if (redestribute_objects(ni) < 0)
+        return -1;
+
     return 0;
 }
 
@@ -555,7 +691,7 @@ int process_message_udp(t_nodeinfo *ni)
         puts("\x1b[31m[!] Error in recvfrom\033[m");
         return -1;
     }
-    if (recvd_bytes > 30) {
+    if (recvd_bytes >= 63) {
         // Invalid message
         puts("\x1b[33m[!] Received invalid UDP message\033[m");
     }
@@ -587,6 +723,21 @@ int process_message_udp(t_nodeinfo *ni)
             process_rsp_message(buffer, recvd_bytes+1, ni);
             return 0;
         }
+        else if (strncmp(buffer, "GET ", 4) == 0) {
+            strcat(buffer, "\n");
+            process_get_message(buffer, recvd_bytes+1, ni);
+            return 0;
+        }
+        else if (strncmp(buffer, "SET ", 4) == 0) {
+            strcat(buffer, "\n");
+            process_set_message(buffer, recvd_bytes+1, 0, ni);
+            return 0;
+        }
+        else if (strncmp(buffer, "RGET ", 5) == 0) {
+            strcat(buffer, "\n");
+            process_rget_message(buffer, recvd_bytes+1, ni);
+            return 0;
+        }
         else if (strncmp(buffer, "EFND ", 5) == 0) {
             unsigned int key;
             if ((sscanf(buffer+5, "%u", &key) != 1) || key > 31) {
@@ -595,7 +746,7 @@ int process_message_udp(t_nodeinfo *ni)
                 return 0;
             }
 
-            if (register_request(ni->n, key, &sender, ni) < 0) {
+            if (register_request(ni->find_n, key, &sender, ni) < 0) {
                 puts("\x1b[33[!] Find request queue is full\033[m");
                 return 0;
             }
@@ -603,21 +754,21 @@ int process_message_udp(t_nodeinfo *ni)
             if ((ni->succ_id == ni->key && ni->pred_id == ni->key) || (ni->succ_id && ring_distance(ni->key, key) < ring_distance(ni->key, ni->succ_id))) {
                 unsigned int self_port;
                 sscanf(ni->self_port, "%u", &self_port);
-                process_found_key(ni->key, ni->n, ni->ipaddr, self_port, ni);
+                process_found_key(ni->key, ni->find_n, ni->ipaddr, self_port, ni);
                 return 0;
             }
 
             char message[64] = "";
-            sprintf(message, "FND %u %u %u %s %s\n", key, ni->n, ni->key, ni->ipaddr, ni->self_port);
+            sprintf(message, "FND %u %u %u %s %s\n", key, ni->find_n, ni->key, ni->ipaddr, ni->self_port);
             
             int result = send_to_closest(message, key, ni);
             if (result < 0) {
-                drop_request(ni->n, ni);
+                drop_request(ni->find_n, ni);
                 return 0;
             }
 
-            ni->n++;
-            ni->n %= 100;
+            ni->find_n++;
+            ni->find_n %= 100;
             return 0;
         }
         else if (strncmp(buffer, "EPRED ", 6) == 0) {

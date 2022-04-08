@@ -97,7 +97,7 @@ t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port)
     ni->pred_id = 0;
     ni->succ_id = 0;
     ni->shcut_id = 0;
-    ni->n = 0;
+    ni->find_n = 0;
     for (size_t i = 0; i < sizeof(ni->requests) / sizeof(int); i++)
         ni->requests[i] = -1;
     memset(ni->request_addr, 0, sizeof(ni->request_addr));
@@ -191,12 +191,35 @@ t_ongoing_udp_message *pop_udp_message_from(t_nodeinfo *ni, struct sockaddr *rec
             if (prev != NULL)
                 prev->next = aux->next;
             else 
-                ni->udp_message_list = NULL;
+                ni->udp_message_list = aux->next;
             aux->next = NULL;
             return aux;
         }
     }
     return NULL;
+}
+
+char *get_object(unsigned int key, t_nodeinfo* ni)
+{
+    if (key < 32)
+        return ni->objects[key];
+    return NULL;
+}
+
+void set_object(unsigned int key, char *value, t_nodeinfo *ni)
+{
+    if (key >= 32)
+        return;
+
+    if (ni->objects[key] != NULL)
+        free(ni->objects[key]);
+
+    if (value == NULL)
+        ni->objects[key] = NULL;
+    else {
+        ni->objects[key] = (char*) calloc(strlen(value)+1, sizeof(char));
+        strcpy(ni->objects[key], value);
+    }
 }
 
 t_ongoing_udp_message *find_udp_message_from(t_nodeinfo *ni, struct sockaddr *recipient)
@@ -217,6 +240,8 @@ void free_nodeinfo(t_nodeinfo *ni)
         if (ni->shcut_info != NULL)
             freeaddrinfo(ni->shcut_info);
         free_udp_message_list(ni->udp_message_list);
+        for (unsigned int i = 0; i < 32; i++) 
+            free(ni->objects[i]);
         free(ni);
     }
 }
@@ -260,11 +285,12 @@ t_read_out recv_message(int sd, char *buffer, char delim, size_t max_size, t_con
         char *delim_pos = (char*) memchr(ci->buffer, delim, ci->buffer_size);
         if (delim_pos == NULL) // Not a full message
             delim_pos = ci->buffer + ci->buffer_size - 1;
-        
+
         // Calculate size and copy remaining data to user buffer
         size_t size = (delim_pos - ci->buffer) + 1;
         size_t actual_size = size > max_size ? max_size : size;
         memcpy(buffer, ci->buffer, actual_size);
+        buffer[actual_size] = '\0';
 
         if (actual_size < ci->buffer_size) {
             // If the buffer wasn't emptied, move everything to the beginning

@@ -1,5 +1,5 @@
 CC := gcc
-CFLAGS := -std=c99 -Wall -ggdb
+CFLAGS := -std=c99 -Wall -O3
 
 FILES := $(wildcard src/*.c)
 HEADERS := $(wildcard src/*.h)

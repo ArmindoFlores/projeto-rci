@@ -71,7 +71,7 @@ t_msginfotype get_self_or_pred_message_info(char *message, unsigned int *node_i,
     return MI_SUCCESS;
 }
 
-t_msginfotype get_fnd_or_rsp_message_info(char *message, unsigned int *k, unsigned int *n, unsigned int *node_i, char *node_ip, unsigned int *node_port)
+t_msginfotype get_fnd_or_rsp_or_get_message_info(char *message, unsigned int *k, unsigned int *n, unsigned int *node_i, char *node_ip, unsigned int *node_port)
 {
     if (sscanf(message+4, "%u %u %u %15s %u", k, n, node_i, node_ip, node_port) != 5) {
         // Invalid message
@@ -101,6 +101,35 @@ t_msginfotype get_fnd_or_rsp_message_info(char *message, unsigned int *k, unsign
     if (!isipaddr(node_ip)) {
         // IP address is invalid
         return MI_INVALID_IP;
+    }
+
+    return MI_SUCCESS;
+}
+
+t_msginfotype get_rget_or_set_message_info(char *message, unsigned int *k, unsigned int *n, unsigned int *node_i, char *value)
+{
+    if (sscanf(message, "%u %u %u %16s", k, n, node_i, value) != 4) {
+        if (sscanf(message, "%u %u %u", k, n, node_i) != 3) {
+            // Invalid message
+            return MI_INVALID;
+        }
+        else
+            value[0] = '\0';
+    }
+
+    if (*k > 32) {
+        // Search key / result is invalid
+        return MI_INVALID_K;
+    }
+
+    if (*n > 99) {
+        // Serial number is invalid
+        return MI_INVALID_N;
+    }
+
+    if (*node_i > 32) {
+        // Node key is invalid
+        return MI_INVALID_ID;
     }
 
     return MI_SUCCESS;

@@ -73,7 +73,19 @@ t_msginfotype get_self_or_pred_message_info(char *message, unsigned int *node_i,
  * @param node_port where to store the node port
  * @return [ @b t_msginfotype ] type of result
  */
-t_msginfotype get_fnd_or_rsp_message_info(char *message, unsigned int *k, unsigned int *n, unsigned int *node_i, char *node_ip, unsigned int *node_port);
+t_msginfotype get_fnd_or_rsp_or_get_message_info(char *message, unsigned int *k, unsigned int *n, unsigned int *node_i, char *node_ip, unsigned int *node_port);
+
+/**
+ * @brief Get the search key/result, serial number, node identifier, and associated value
+ * 
+ * @param message the message containing the information
+ * @param k where to store the search key/result
+ * @param n where to store the search serial number
+ * @param node_i where to store the node identifier
+ * @param value value associated with the key
+ * @return [ @b t_msginfotype ] type of result
+ */
+t_msginfotype get_rget_or_set_message_info(char *message, unsigned int *k, unsigned int *n, unsigned int *node_i, char *value);
 
 /**
  * @brief Fills @b dest with the IP address contained in @b sa
