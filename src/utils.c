@@ -108,7 +108,7 @@ t_msginfotype get_fnd_or_rsp_or_get_message_info(char *message, unsigned int *k,
 
 t_msginfotype get_rget_or_set_message_info(char *message, unsigned int *k, unsigned int *n, unsigned int *node_i, char *value)
 {
-    if (sscanf(message, "%u %u %u %16s", k, n, node_i, value) != 4) {
+    if (sscanf(message, "%u %u %u %16[^\n]", k, n, node_i, value) != 4) {
         if (sscanf(message, "%u %u %u", k, n, node_i) != 3) {
             // Invalid message
             return MI_INVALID;

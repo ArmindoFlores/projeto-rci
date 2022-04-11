@@ -207,7 +207,7 @@ int process_command_exit(t_nodeinfo *ni)
 
 int process_command_find(unsigned int key, t_nodeinfo *ni)
 {
-    if ((ni->succ_id == ni->key && ni->pred_id == ni->key) || (ni->succ_id && ring_distance(ni->key, key) < ring_distance(ni->key, ni->succ_id))) {
+    if ((ni->succ_id == ni->key && ni->pred_id == ni->key) || (ni->succ_id && ring_distance(ni->key, key) <= ring_distance(ni->key, ni->succ_id))) {
         printf("Key %u belongs to node %u (%s:%s)\n", key, ni->key, ni->ipaddr, ni->self_port);
         return 0;
     }
@@ -259,7 +259,7 @@ int process_command_echord(t_nodeinfo *ni)
 
 int process_command_get(unsigned int key, t_nodeinfo *ni)
 {
-    if ((ni->succ_id == ni->key && ni->pred_id == ni->key) || (ni->succ_id && ring_distance(ni->key, key) < ring_distance(ni->key, ni->succ_id))) {
+    if ((ni->succ_id == ni->key && ni->pred_id == ni->key) || (ni->succ_id && ring_distance(ni->key, key) <= ring_distance(ni->key, ni->succ_id))) {
         char *object = get_object(key, ni);
         if (object == NULL)
             printf("%u -> NULL\n", key);
@@ -287,7 +287,7 @@ int process_command_get(unsigned int key, t_nodeinfo *ni)
 
 int process_command_set(unsigned int key, char *value, t_nodeinfo *ni)
 {
-    if ((ni->succ_id == ni->key && ni->pred_id == ni->key) || (ni->succ_id && ring_distance(ni->key, key) < ring_distance(ni->key, ni->succ_id))) {
+    if ((ni->succ_id == ni->key && ni->pred_id == ni->key) || (ni->succ_id && ring_distance(ni->key, key) <= ring_distance(ni->key, ni->succ_id))) {
         if (strlen(value) == 0)
             set_object(key, NULL, ni);
         else
@@ -412,7 +412,7 @@ int process_user_message(t_nodeinfo *ni)
         unsigned int key;
         char value[24] = "";
         char *start_pos = strchr(buffer, ' ');
-        if (!start_pos || sscanf(start_pos+1, "%u %16s", &key, value) != 2) {
+        if (!start_pos || sscanf(start_pos+1, "%u %16[^\n]", &key, value) != 2) {
             if (sscanf(start_pos+1, "%u", &key) != 1) {
                 puts("Invalid format.\nUsage: \x1b[4ms\033[met k [value]");
                 return 0;

@@ -234,7 +234,7 @@ int process_fnd_message(char *buffer, size_t buffer_size, t_nodeinfo *ni)
     // Calculate distance to self, successor, and shortcut
     unsigned int distance_self = ring_distance(ni->key, search_key);
     unsigned int distance_succ = ring_distance(ni->succ_id, search_key);
-    if (distance_self < distance_succ) {
+    if (distance_self <= distance_succ) {
         // Search key belongs to this node
         puts("\x1b[33m[*] Found the key!\033[m");
         char message[64] = "";
@@ -282,7 +282,7 @@ int process_get_message(char *buffer, size_t buffer_size, t_nodeinfo *ni)
         printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor): '%s'\033[m\n", ni->pred_ip, ni->pred_port, buffer);
         return -1;
     }
-    if (ring_distance(ni->key, search_key) < ring_distance(ni->succ_id, search_key)) {
+    if (ring_distance(ni->key, search_key) <= ring_distance(ni->succ_id, search_key)) {
         // This node has this object; forward its value
         char message[64] = "";
         char *object = get_object(search_key, ni);
@@ -342,7 +342,8 @@ int process_set_message(char *buffer, size_t buffer_size, int from_successor, t_
         printf("\x1b[31m[!] Received malformatted message from %s:%d (predecessor): '%s'\033[m\n", ni->pred_ip, ni->pred_port, buffer);
         return -1;
     }
-    if (from_successor || ring_distance(ni->key, search_key) < ring_distance(ni->succ_id, search_key)) {
+    // printf("search_key=%u key=%u\n", search_key, key);
+    if (ni->succ_fd == -1 || from_successor || ring_distance(ni->key, search_key) <= ring_distance(ni->succ_id, search_key)) {
         // This node has this object; set its value
         if (strlen(value) == 0)
             set_object(search_key, NULL, ni);
@@ -585,7 +586,7 @@ int process_message_temp(t_nodeinfo *ni)
     // Message to be sent
     char message[64] = "";
     // Only send PRED message if we have a successor and the node is entering 
-    if (ni->succ_id != ni->key && ni->succ_fd != -1 && ring_distance(ni->key, node_i) < ring_distance(ni->key, ni->succ_id)) {
+    if (ni->succ_id != ni->key && ni->succ_fd != -1 && ring_distance(ni->key, node_i) <= ring_distance(ni->key, ni->succ_id)) {
         // There are already more than two nodes in this ring
         // Let the current successor know it has a new predecessor
         sprintf(message, "PRED %d %s %d\n", node_i, node_ip, node_port);
@@ -751,7 +752,7 @@ int process_message_udp(t_nodeinfo *ni)
                 return 0;
             }
 
-            if ((ni->succ_id == ni->key && ni->pred_id == ni->key) || (ni->succ_id && ring_distance(ni->key, key) < ring_distance(ni->key, ni->succ_id))) {
+            if ((ni->succ_id == ni->key && ni->pred_id == ni->key) || (ni->succ_id && ring_distance(ni->key, key) <= ring_distance(ni->key, ni->succ_id))) {
                 unsigned int self_port;
                 sscanf(ni->self_port, "%u", &self_port);
                 process_found_key(ni->key, ni->find_n, ni->ipaddr, self_port, ni);
