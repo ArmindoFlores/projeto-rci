@@ -71,7 +71,8 @@ int process_command_bentry(int boot, int port, char *ipaddr, t_nodeinfo *ni)
         return 0;
     }
     else {
-        register_udp_message(ni, message, strlen(message), res->ai_addr, res->ai_addrlen, UDPMSG_ENTERING);
+        if (register_udp_message(ni, message, strlen(message), res->ai_addr, res->ai_addrlen, UDPMSG_ENTERING) == -1)
+            return -1;
     }
     freeaddrinfo(res);
     return 0;
@@ -290,10 +291,14 @@ int process_command_get(unsigned int key, t_nodeinfo *ni)
 int process_command_set(unsigned int key, char *value, t_nodeinfo *ni)
 {
     if ((ni->succ_id == ni->key && ni->pred_id == ni->key) || (ni->succ_id && ring_distance(ni->key, key) <= ring_distance(ni->key, ni->succ_id))) {
-        if (strlen(value) == 0)
-            set_object(key, NULL, ni);
-        else
-            set_object(key, value, ni);
+        if (strlen(value) == 0) {
+            if (set_object(key, NULL, ni) == -1)
+                return -1;
+        }
+        else {
+            if (set_object(key, value, ni) == -1)
+                return -1;
+        }
         return 0;
     }
 

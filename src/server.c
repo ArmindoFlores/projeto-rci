@@ -103,7 +103,7 @@ int send_to_closest(char *message, unsigned int key, t_nodeinfo *ni)
     return 0;
 }
 
-void process_found_key(unsigned int search_key, unsigned int n, char *ipaddr, unsigned int port, t_nodeinfo* ni)
+int process_found_key(unsigned int search_key, unsigned int n, char *ipaddr, unsigned int port, t_nodeinfo* ni)
 {
     int request_key = get_associated_key(n, ni);
     if (request_key == -1) {
@@ -124,7 +124,8 @@ void process_found_key(unsigned int search_key, unsigned int n, char *ipaddr, un
                 puts("\x1b[31m[!] Error sending EPRED message\033[m");
             }
             else {
-                register_udp_message(ni, message, strlen(message), &sa, sa_len, UDPMSG_ENTERING);
+                if (register_udp_message(ni, message, strlen(message), &sa, sa_len, UDPMSG_ENTERING) == -1)
+                    return -1; 
             }
         }
         else  // Find request was initiated by the user
@@ -132,6 +133,8 @@ void process_found_key(unsigned int search_key, unsigned int n, char *ipaddr, un
 
         drop_request(n, ni);
     }
+
+    return 0;
 }
 
 int process_incoming_connection(t_nodeinfo *ni)
@@ -158,10 +161,15 @@ int process_incoming_connection(t_nodeinfo *ni)
 
     // Save connection information in ni->temp and the socket fd in ni->temp_fd
     ni->temp_fd = newfd;
-    if (ni->temp == NULL)
+    if (ni->temp == NULL) {
         ni->temp = new_conn_info(2048);
-    else
-        set_conn_info(ni->temp, 2048);
+        if (ni->temp == NULL)
+            return -1;
+    }
+    else {
+        if (set_conn_info(ni->temp, 2048) != 0)
+            return -1;
+    }
     return 0;
 }
 
@@ -262,7 +270,8 @@ int process_rsp_message(char *buffer, size_t buffer_size, t_nodeinfo *ni)
     }
     if (key == ni->key) {
         // This message is meant for this node. Process it
-        process_found_key(search_key, n, ipaddr, port, ni);
+        if (process_found_key(search_key, n, ipaddr, port, ni) != 0)
+            return -1;
     }
     else {
         // This message is not meant for this node. Forward it.
@@ -345,10 +354,14 @@ int process_set_message(char *buffer, size_t buffer_size, int from_successor, t_
     // printf("search_key=%u key=%u\n", search_key, key);
     if (ni->succ_fd == -1 || from_successor || ring_distance(ni->key, search_key) <= ring_distance(ni->succ_id, search_key)) {
         // This node has this object; set its value
-        if (strlen(value) == 0)
-            set_object(search_key, NULL, ni);
-        else
-            set_object(search_key, value, ni);
+        if (strlen(value) == 0) {
+            if (set_object(search_key, NULL, ni) == -1)
+                return -1;
+        }
+        else {
+            if (set_object(search_key, value, ni) == -1)
+                return -1;
+        }
     }
     else {
         // This message is not meant for this node. Forward it.
@@ -666,8 +679,10 @@ int process_message_temp(t_nodeinfo *ni)
     ni->succ_fd = ni->temp_fd;
     ni->succ_id = node_i;
     strcpy(ni->succ_ip, node_ip);
-    ni->succ_port = node_port; 
-    copy_conn_info(&ni->successor, ni->temp);
+    ni->succ_port = node_port;
+
+    if (copy_conn_info(&ni->successor, ni->temp) != 0)
+        return -1;
 
     reset_conn_buffer(ni->temp);   
     ni->temp_fd = -1;
@@ -755,7 +770,8 @@ int process_message_udp(t_nodeinfo *ni)
             if ((ni->succ_id == ni->key && ni->pred_id == ni->key) || (ni->succ_id && ring_distance(ni->key, key) <= ring_distance(ni->key, ni->succ_id))) {
                 unsigned int self_port;
                 sscanf(ni->self_port, "%u", &self_port);
-                process_found_key(ni->key, ni->find_n, ni->ipaddr, self_port, ni);
+                if (process_found_key(ni->key, ni->find_n, ni->ipaddr, self_port, ni) != 0)
+                    return -1;
                 return 0;
             }
 

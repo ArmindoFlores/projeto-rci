@@ -177,10 +177,15 @@ int create_ring(t_nodeinfo *ni)
         close_sockets(ni);
         return 0;
     }
-    if (ni->successor == NULL)
+    if (ni->successor == NULL) {
         ni->successor = new_conn_info(2048);
-    else
-        set_conn_info(ni->successor, 2048);
+        if (ni->successor == NULL)
+            return -1;
+    }
+    else {
+        if (set_conn_info(ni->successor, 2048) != 0)
+            return -1;
+    }
     ni->succ_id = ni->key;
     strcpy(ni->succ_ip, ni->ipaddr);
     sscanf(ni->self_port, "%u", &ni->succ_port);

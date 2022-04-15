@@ -26,10 +26,15 @@ int init_client(const char* addr, const char* port, t_nodeinfo *ni)
         return -1;
 
     ni->pred_fd = sockfd;
-    if (!ni->predecessor)
+    if (!ni->predecessor) {
         ni->predecessor = new_conn_info(2048);
-    else
-        set_conn_info(ni->predecessor, 2048);
+        if (ni->predecessor == NULL)
+            return -1;
+    }
+    else {
+        if (set_conn_info(ni->predecessor, 2048) != 0)
+            return -1;
+    }
     strcpy(ni->pred_ip, addr);
     sscanf(port, "%d", &ni->pred_port);
 

@@ -109,8 +109,9 @@ t_conn_info *new_conn_info(int block_size);
  * 
  * @param dest destination object
  * @param src source object
+ * @return [ @b int ] 0 if successfull, -1 otherwise
  */
-void copy_conn_info(t_conn_info **dest, t_conn_info *src);
+int copy_conn_info(t_conn_info **dest, t_conn_info *src);
 
 /**
  * @brief Reset this connection's internal buffer
@@ -131,8 +132,9 @@ void free_conn_info(t_conn_info *ci);
  * 
  * @param ci the t_conn_info object
  * @param block_size how many bytes to read at a time
+ * @return [ @b int ] 0 if successfull, -1 otherwise
  */
-void set_conn_info(t_conn_info *ci, int block_size);
+int set_conn_info(t_conn_info *ci, int block_size);
 
 /**
  * @brief Checks whether there's pending data to read
@@ -168,7 +170,7 @@ int maxfd(t_nodeinfo *ni);
  * @param recipient message's recipient
  * @param recipient_size size of message recipient
  * @param msgtype type of message
- * @return [ @b int ] 0 if successfull, -1 if there is already an ongoing message to the same recipient
+ * @return [ @b int ] 0 if successfull, 1 if there is already an ongoing message to the same recipient and -1 in case of an error
  */
 int register_udp_message(t_nodeinfo *ni, char *message, size_t size, struct sockaddr *recipient, socklen_t recipient_size, t_udp_message_type msgtype);
 
@@ -204,9 +206,10 @@ char *get_object(unsigned int key, t_nodeinfo* ni);
  * 
  * @param key object's key
  * @param value object's value
- * @param ni necessary information about the node 
+ * @param ni necessary information about the node
+ * @return [ @b int ] 0 if successfull, 1 if the key is invalid and -1 in case of an error
  */
-void set_object(unsigned int key, char *value, t_nodeinfo *ni);
+int set_object(unsigned int key, char *value, t_nodeinfo *ni);
 
 /**
  * @brief Frees a t_nodeinfo object

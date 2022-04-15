@@ -19,7 +19,11 @@ struct conn_info {
 t_conn_info *new_conn_info(int block_size)
 {
     t_conn_info *result = (t_conn_info*) malloc(sizeof(t_conn_info)); 
+    if (result == NULL)
+        return NULL;
     result->buffer = (char*) calloc(block_size, sizeof(char));
+    if (result->buffer == NULL)
+        return NULL;
     result->buffer_size = 0;
     result->block_size = block_size;
     return result;
@@ -33,15 +37,19 @@ void free_conn_info(t_conn_info *ci)
     }
 }
 
-void set_conn_info(t_conn_info *ci, int block_size)
+int set_conn_info(t_conn_info *ci, int block_size)
 {
     if (ci->block_size != block_size) {
         free(ci->buffer);
         ci->buffer = (char*) calloc(block_size, sizeof(char));
+        if (ci->buffer == NULL)
+            return -1;
     }
 
     ci->buffer_size = 0;
     ci->block_size = block_size;
+
+    return 0;
 }
 
 int has_available_data(t_conn_info *ci)
@@ -49,17 +57,21 @@ int has_available_data(t_conn_info *ci)
     return ci->buffer_size > 0;
 }
 
-void copy_conn_info(t_conn_info **dest, t_conn_info *src)
+int copy_conn_info(t_conn_info **dest, t_conn_info *src)
 {
     if (*dest == NULL) {
         // If destination is not initialize, do it
         *dest = new_conn_info(src->block_size);
+        if (*dest == NULL)
+            return -1;
     }
     else {
         if ((*dest)->block_size != src->block_size) {
             // If both objects have different block_sizes, allocate a new buffer to match
             free((*dest)->buffer);
             (*dest)->buffer = (char*) calloc(src->block_size, sizeof(char));
+            if ((*dest)->buffer == NULL)
+                return -1;
         }
         (*dest)->block_size = src->block_size;
     }
@@ -67,6 +79,7 @@ void copy_conn_info(t_conn_info **dest, t_conn_info *src)
     (*dest)->buffer_size = src->buffer_size;
     if (src->buffer_size)
         memcpy((*dest)->buffer, src->buffer, src->buffer_size);  // Copy the buffer
+    return 0;
 }
 
 void reset_conn_buffer(t_conn_info* ci)
@@ -163,16 +176,20 @@ int register_udp_message(t_nodeinfo *ni, char *message, size_t size, struct sock
     for (aux = ni->udp_message_list; aux != NULL; prev = aux, aux = aux->next) {
         if (cmp_addr(&aux->recipient, recipient)) {
             // There is already an ongoing message to this recipient
-            return -1;
+            return 1;
         }
     }
     aux = prev;
     if (aux == NULL) {
         ni->udp_message_list = (t_ongoing_udp_message*) malloc(sizeof(t_ongoing_udp_message));
+        if (ni->udp_message_list == NULL)
+            return -1;
         aux = ni->udp_message_list;
     }
     else {
         aux->next = (t_ongoing_udp_message*) malloc(sizeof(t_ongoing_udp_message));
+        if (aux->next == NULL)
+            return -1;
         aux = aux->next;
     }
     gettimeofday(&aux->timestamp, NULL);
@@ -208,10 +225,10 @@ char *get_object(unsigned int key, t_nodeinfo* ni)
     return NULL;
 }
 
-void set_object(unsigned int key, char *value, t_nodeinfo *ni)
+int set_object(unsigned int key, char *value, t_nodeinfo *ni)
 {
     if (key >= 32)
-        return;
+        return 1;
 
     if (ni->objects[key] != NULL)
         free(ni->objects[key]);
@@ -220,8 +237,12 @@ void set_object(unsigned int key, char *value, t_nodeinfo *ni)
         ni->objects[key] = NULL;
     else {
         ni->objects[key] = (char*) calloc(strlen(value)+1, sizeof(char));
+        if (ni->objects[key] == NULL)
+            return -1;
         strcpy(ni->objects[key], value);
     }
+
+    return 0;
 }
 
 t_ongoing_udp_message *find_udp_message_from(t_nodeinfo *ni, struct sockaddr *recipient)
