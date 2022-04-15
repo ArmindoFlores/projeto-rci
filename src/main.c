@@ -30,7 +30,7 @@ char* get_event_string(t_event e)
 }
 
 void usage(char *name) {
-    printf("Usage: ./%s ID IPADDR PORT\n", name);
+    printf("Usage: %s ID IPADDR PORT\n", name);
 }
 
 void check_for_lost_udp_messages(t_nodeinfo *ni)
@@ -112,7 +112,13 @@ int main(int argc, char *argv[])
     }
 
     if (!strisui(argv[1])) {
-        fprintf(stderr, "ID must be a number (was '%s')\n", argv[1]);
+        fprintf(stderr, "ID must be a number between 0 and 31 (was '%s')\n", argv[1]);
+        usage(argv[0]);
+        exit(1);
+    }
+
+    if (!isipaddr(argv[2])) {
+        fprintf(stderr, "IPADDR must be a valid IP address (was '%s')\n", argv[2]);
         usage(argv[0]);
         exit(1);
     }
@@ -123,14 +129,13 @@ int main(int argc, char *argv[])
         exit(1);
     }    
 
+    // Initialize node
     t_nodeinfo *ni = new_nodeinfo(strtoui(argv[1]), argv[2], argv[3]);
 
-    // Create the server
-    // if (err != 0) {
-    //     printf("Error initializing server!\n");
-    //     free_nodeinfo(ni);
-    //     exit(1);
-    // }
+    if (ni == NULL) {
+        printf("Error initializing server!\n");
+        exit(1);
+    }
 
     // Main loop
     printf(">>> ");

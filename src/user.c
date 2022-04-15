@@ -191,6 +191,8 @@ int process_command_leave(t_nodeinfo *ni)
     close(ni->udp_fd);
     ni->udp_fd = -1;
 
+    puts("\x1b[32m[*] Node successfully left the ring\033[m");
+
     return 0;
 }
 
@@ -413,7 +415,7 @@ int process_user_message(t_nodeinfo *ni)
         char value[24] = "";
         char *start_pos = strchr(buffer, ' ');
         if (!start_pos || sscanf(start_pos+1, "%u %16[^\n]", &key, value) != 2) {
-            if (sscanf(start_pos+1, "%u", &key) != 1) {
+            if (strlen(buffer) < 4 || sscanf(start_pos+1, "%u", &key) != 1) {
                 puts("Invalid format.\nUsage: \x1b[4ms\033[met k [value]");
                 return 0;
             }

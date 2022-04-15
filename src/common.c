@@ -77,6 +77,8 @@ void reset_conn_buffer(t_conn_info* ci)
 t_nodeinfo *new_nodeinfo(int id, char *ipaddr, char *port)
 {
     t_nodeinfo *ni = (t_nodeinfo*) calloc(1, sizeof(t_nodeinfo));
+    if (ni == NULL)
+        return NULL;
     ni->key = id;
     strncpy(ni->self_port, port, sizeof(ni->self_port)-1);
     strncpy(ni->ipaddr, ipaddr, sizeof(ni->ipaddr)-1);
