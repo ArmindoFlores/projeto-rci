@@ -416,11 +416,11 @@ int process_user_message(t_nodeinfo *ni)
         return process_command_get(key, ni);
     }
     if (strncmp(buffer, "set", 3) == 0 || strncmp(buffer, "se ", 3) == 0 || strncmp(buffer, "se\n", 3) == 0) {
-        unsigned int key;
+        unsigned int key = 0;
         char value[24] = "";
         char *start_pos = strchr(buffer, ' ');
         if (!start_pos || sscanf(start_pos+1, "%u %16[^\n]", &key, value) != 2) {
-            if (strlen(buffer) < 4 || sscanf(start_pos+1, "%u", &key) != 1) {
+            if (!start_pos || strlen(buffer) < 4 || sscanf(start_pos+1, "%u", &key) != 1) {
                 puts("Invalid format.\nUsage: \x1b[4ms\033[met k [value]");
                 return 0;
             }
